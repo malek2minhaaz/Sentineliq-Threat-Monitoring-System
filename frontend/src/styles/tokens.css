@@ -1,0 +1,256 @@
+/* ═══════════════════════════════════════════════════════════════════
+   SentinalIQ — Design Token System
+   All theming is driven entirely by swapping CSS custom properties
+   under [data-theme="dark"] and [data-theme="light"].
+   ═══════════════════════════════════════════════════════════════════ */
+
+:root,
+[data-theme="dark"] {
+  /* ── Backgrounds ───────────────────────────────────────────────── */
+  --bg-primary: #0a0e1a;
+  --bg-secondary: #111827;
+  --bg-tertiary: #1a2332;
+  --bg-card: #1a1f35;
+  --bg-card-hover: #222840;
+  --bg-glass: rgba(26, 31, 53, 0.75);
+  --bg-glass-hover: rgba(26, 31, 53, 0.9);
+  --bg-sidebar: #0d1225;
+  --bg-input: #1a2332;
+  --bg-tooltip: #1e293b;
+
+  /* ── Text ──────────────────────────────────────────────────────── */
+  --text-primary: #e2e8f0;
+  --text-secondary: #94a3b8;
+  --text-tertiary: #64748b;
+  --text-inverse: #0a0e1a;
+  --text-link: #22d3ee;
+  --text-code: #67e8f9;
+
+  /* ── Accent / Neon Cyberpunk ────────────────────────────────────── */
+  --accent-primary: #06b6d4;   /* Cyan */
+  --accent-secondary: #d946ef;  /* Magenta / Purple */
+  --accent-tertiary: #f59e0b;   /* Amber */
+  --accent-success: #10b981;    /* Green */
+  --accent-danger: #ef4444;     /* Red */
+  --accent-warning: #f59e0b;    /* Amber */
+  --accent-info: #3b82f6;       /* Blue */
+
+  /* ── Glow effects (dark theme only) ─────────────────────────────── */
+  --glow-cyan: 0 0 15px rgba(6, 182, 212, 0.3);
+  --glow-magenta: 0 0 15px rgba(217, 70, 239, 0.3);
+  --glow-card: 0 0 20px rgba(6, 182, 212, 0.08);
+  --glow-border: 0 0 8px rgba(6, 182, 212, 0.15);
+
+  /* ── Borders ────────────────────────────────────────────────────── */
+  --border-primary: 1px solid rgba(148, 163, 184, 0.12);
+  --border-accent: 1px solid rgba(6, 182, 212, 0.3);
+  --border-hover: 1px solid rgba(148, 163, 184, 0.25);
+  --border-radius-sm: 6px;
+  --border-radius-md: 10px;
+  --border-radius-lg: 16px;
+  --border-radius-xl: 24px;
+
+  /* ── Shadows ────────────────────────────────────────────────────── */
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.3);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.4);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.5);
+  --shadow-glow: 0 0 30px rgba(6, 182, 212, 0.1);
+
+  /* ── Severity colors ────────────────────────────────────────────── */
+  --sev-critical: #ef4444;
+  --sev-high: #f97316;
+  --sev-medium: #eab308;
+  --sev-low: #22c55e;
+  --sev-info: #3b82f6;
+
+  /* ── Glassmorphism ──────────────────────────────────────────────── */
+  --glass-bg: rgba(26, 31, 53, 0.55);
+  --glass-border: 1px solid rgba(148, 163, 184, 0.08);
+  --glass-blur: 12px;
+
+  /* ── Transition ─────────────────────────────────────────────────── */
+  --transition-fast: 150ms ease;
+  --transition-base: 250ms ease;
+  --transition-slow: 400ms ease;
+
+  /* ── Spacing ────────────────────────────────────────────────────── */
+  --space-xs: 4px;
+  --space-sm: 8px;
+  --space-md: 16px;
+  --space-lg: 24px;
+  --space-xl: 32px;
+  --space-2xl: 48px;
+
+  /* ── Font ───────────────────────────────────────────────────────── */
+  --font-sans: 'Inter', -apple-system, BlinkMacSystemFont, sans-serif;
+  --font-mono: 'JetBrains Mono', monospace;
+  --font-size-xs: 0.75rem;
+  --font-size-sm: 0.875rem;
+  --font-size-base: 1rem;
+  --font-size-lg: 1.125rem;
+  --font-size-xl: 1.25rem;
+  --font-size-2xl: 1.5rem;
+  --font-size-3xl: 2rem;
+
+  /* ── Sidebar ────────────────────────────────────────────────────── */
+  --sidebar-width: 260px;
+  --sidebar-collapsed-width: 64px;
+  --header-height: 60px;
+
+  /* ── Scanline overlay (dark theme) ──────────────────────────────── */
+  --scanline-opacity: 0.03;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Light Theme — Clean, minimal, no neon glow, no scanlines
+   ═══════════════════════════════════════════════════════════════════ */
+
+[data-theme="light"] {
+  --bg-primary: #f8fafc;
+  --bg-secondary: #f1f5f9;
+  --bg-tertiary: #e2e8f0;
+  --bg-card: #ffffff;
+  --bg-card-hover: #f8fafc;
+  --bg-glass: rgba(255, 255, 255, 0.8);
+  --bg-glass-hover: rgba(255, 255, 255, 0.95);
+  --bg-sidebar: #ffffff;
+  --bg-input: #f1f5f9;
+  --bg-tooltip: #1e293b;
+
+  --text-primary: #0f172a;
+  --text-secondary: #475569;
+  --text-tertiary: #94a3b8;
+  --text-inverse: #f8fafc;
+  --text-link: #0891b2;
+  --text-code: #0e7490;
+
+  --accent-primary: #0891b2;
+  --accent-secondary: #9333ea;
+  --accent-tertiary: #d97706;
+  --accent-success: #059669;
+  --accent-danger: #dc2626;
+  --accent-warning: #d97706;
+  --accent-info: #2563eb;
+
+  --glow-cyan: none;
+  --glow-magenta: none;
+  --glow-card: none;
+  --glow-border: none;
+
+  --border-primary: 1px solid rgba(0, 0, 0, 0.08);
+  --border-accent: 1px solid rgba(8, 145, 178, 0.25);
+  --border-hover: 1px solid rgba(0, 0, 0, 0.15);
+
+  --shadow-sm: 0 1px 3px rgba(0, 0, 0, 0.06);
+  --shadow-md: 0 4px 12px rgba(0, 0, 0, 0.08);
+  --shadow-lg: 0 8px 32px rgba(0, 0, 0, 0.1);
+  --shadow-glow: none;
+
+  --scanline-opacity: 0;
+}
+
+/* ═══════════════════════════════════════════════════════════════════
+   Global Resets & Base Styles
+   ═══════════════════════════════════════════════════════════════════ */
+
+*, *::before, *::after {
+  box-sizing: border-box;
+  margin: 0;
+  padding: 0;
+}
+
+html {
+  font-size: 16px;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+body {
+  font-family: var(--font-sans);
+  background: var(--bg-primary);
+  color: var(--text-primary);
+  line-height: 1.6;
+  min-height: 100vh;
+  overflow-x: hidden;
+  transition: background var(--transition-slow), color var(--transition-slow);
+}
+
+/* Scanline overlay (dark theme only) */
+body::after {
+  content: '';
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+  z-index: 9999;
+  background: repeating-linear-gradient(
+    0deg,
+    transparent,
+    transparent 2px,
+    rgba(0, 0, 0, var(--scanline-opacity)) 2px,
+    rgba(0, 0, 0, var(--scanline-opacity)) 4px
+  );
+  opacity: 0.5;
+}
+
+a {
+  color: var(--text-link);
+  text-decoration: none;
+  transition: color var(--transition-fast);
+}
+a:hover {
+  opacity: 0.8;
+}
+
+/* Scrollbar styling */
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+::-webkit-scrollbar-track {
+  background: transparent;
+}
+::-webkit-scrollbar-thumb {
+  background: var(--text-tertiary);
+  border-radius: 3px;
+}
+::-webkit-scrollbar-thumb:hover {
+  background: var(--text-secondary);
+}
+
+/* Selection */
+::selection {
+  background: var(--accent-primary);
+  color: var(--text-inverse);
+}
+
+/* Focus */
+:focus-visible {
+  outline: 2px solid var(--accent-primary);
+  outline-offset: 2px;
+}
+
+/* Utility classes */
+.glass {
+  background: var(--glass-bg);
+  backdrop-filter: blur(var(--glass-blur));
+  -webkit-backdrop-filter: blur(var(--glass-blur));
+  border: var(--glass-border);
+}
+
+.glow-border {
+  border: var(--border-accent);
+  box-shadow: var(--glow-border);
+}
+
+.text-mono {
+  font-family: var(--font-mono);
+}
+
+.truncate {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
