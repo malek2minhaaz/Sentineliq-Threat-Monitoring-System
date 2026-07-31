@@ -3,9 +3,20 @@ import { motion } from 'framer-motion';
 import {
   Search, RefreshCw, Upload, Globe,
   Hash, Link, AtSign, FileText, Shield,
-  Clock,
+  Clock, Activity,
 } from 'lucide-react';
 import { api } from '../utils/api';
+
+interface RelatedLog {
+  id: string;
+  timestamp: string;
+  source_ip: string;
+  source: string;
+  severity: string;
+  event_type: string;
+  message: string;
+  endpoint: string;
+}
 
 interface Threat {
   id: string;
@@ -21,6 +32,9 @@ interface Threat {
   tags: string[];
   source: string;
   is_active: boolean;
+  log_events?: RelatedLog[];
+  log_event_count?: number;
+  log_severity_breakdown?: Record<string, number>;
 }
 
 const iocIcons: Record<string, React.ElementType> = {
@@ -290,6 +304,18 @@ export default function Threats() {
                     }}>
                       {threat.confidence}
                     </span>
+                    {(threat.log_event_count ?? 0) > 0 && (
+                      <span className="pill" style={{
+                        fontSize: 10,
+                        padding: '2px 8px',
+                        background: 'rgba(6, 182, 212, 0.12)',
+                        color: '#06b6d4',
+                        border: '1px solid rgba(6, 182, 212, 0.3)',
+                      }}>
+                        <Activity size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />
+                        {threat.log_event_count} log{threat.log_event_count !== 1 ? 's' : ''}
+                      </span>
+                    )}
                   </div>
 
                   {/* Tags */}
@@ -376,6 +402,81 @@ export default function Threats() {
                         {threat.tags.map(tag => (
                           <span key={tag} className="pill pill-cyan">{tag}</span>
                         ))}
+                      </div>
+                    )}
+
+                    {/* Related Log Activity */}
+                    {((threat.log_event_count ?? 0) > 0) && (
+                      <div style={{ marginTop: 12, padding: 12, background: 'var(--bg-secondary)', borderRadius: 'var(--border-radius-sm)' }}>
+                        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
+                          <Activity size={14} style={{ color: '#06b6d4' }} />
+                          <span className="detail-item-label" style={{ margin: 0 }}>
+                            Related Log Activity
+                          </span>
+                          <span className="pill pill-cyan" style={{ fontSize: 10, padding: '2px 8px' }}>
+                            {threat.log_event_count} match{threat.log_event_count !== 1 ? 'es' : ''}
+                          </span>
+                        </div>
+
+                        {/* Severity breakdown */}
+                        {threat.log_severity_breakdown && Object.keys(threat.log_severity_breakdown).length > 0 && (
+                          <div style={{ display: 'flex', gap: 6, flexWrap: 'wrap', marginBottom: 10 }}>
+                            {Object.entries(threat.log_severity_breakdown).map(([sev, count]) => (
+                              <span key={sev} className="badge" style={{
+                                background: `${severityColors[sev] || '#64748b'}1a`,
+                                color: severityColors[sev] || '#64748b',
+                                textTransform: 'capitalize',
+                              }}>
+                                {sev} · {count}
+                              </span>
+                            ))}
+                          </div>
+                        )}
+
+                        {/* Recent matching log events */}
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+                          {(threat.log_events || []).slice(0, 5).map(log => (
+                            <div key={log.id} style={{
+                              display: 'flex',
+                              alignItems: 'flex-start',
+                              gap: 10,
+                              padding: '8px 10px',
+                              background: 'var(--bg-primary)',
+                              borderRadius: 'var(--border-radius-sm)',
+                              borderLeft: `3px solid ${severityColors[log.severity] || '#64748b'}`,
+                            }}>
+                              <div style={{ flex: 1, minWidth: 0 }}>
+                                <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)', lineHeight: 1.5 }}>
+                                  {log.message}
+                                </div>
+                                <div style={{
+                                  marginTop: 4,
+                                  display: 'flex',
+                                  gap: 8,
+                                  flexWrap: 'wrap',
+                                  fontSize: 10,
+                                  color: 'var(--text-tertiary)',
+                                }}>
+                                  <span style={{ display: 'inline-flex', alignItems: 'center', gap: 3 }}>
+                                    <Clock size={10} /> {new Date(log.timestamp).toLocaleString()}
+                                  </span>
+                                  {log.source_ip && (
+                                    <span>{log.source_ip}</span>
+                                  )}
+                                  {log.source && (
+                                    <span style={{ textTransform: 'capitalize' }}>{log.source}</span>
+                                  )}
+                                  {log.event_type && (
+                                    <span style={{ textTransform: 'uppercase' }}>{log.event_type}</span>
+                                  )}
+                                </div>
+                              </div>
+                              <span className={`badge badge-${log.severity}`} style={{ flexShrink: 0, textTransform: 'capitalize' }}>
+                                {log.severity}
+                              </span>
+                            </div>
+                          ))}
+                        </div>
                       </div>
                     )}
                   </motion.div>

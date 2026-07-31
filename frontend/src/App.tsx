@@ -16,6 +16,8 @@ import ErrorBoundary from './components/common/ErrorBoundary';
 const Landing = lazy(() => import('./pages/Landing'));
 const Login = lazy(() => import('./pages/Login'));
 const Register = lazy(() => import('./pages/Register'));
+const AdminLogin = lazy(() => import('./pages/AdminLogin'));
+const AdminPanel = lazy(() => import('./pages/AdminPanel'));
 const Dashboard = lazy(() => import('./pages/Dashboard'));
 const Logs = lazy(() => import('./pages/Logs'));
 const Incidents = lazy(() => import('./pages/Incidents'));
@@ -135,6 +137,10 @@ export default function App() {
                     <Route path="/" element={<PublicRoute><Landing /></PublicRoute>} />
                     <Route path="/login" element={<PublicRoute><Login /></PublicRoute>} />
                     <Route path="/register" element={<PublicRoute><Register /></PublicRoute>} />
+
+                    {/* Admin routes (separate session, own layout) */}
+                    <Route path="/admin/login" element={<AdminLogin />} />
+                    <Route path="/admin" element={<AdminPanel />} />
 
                     {/* Protected routes with layout */}
                     <Route element={<ProtectedRoute><AppLayout /></ProtectedRoute>}>

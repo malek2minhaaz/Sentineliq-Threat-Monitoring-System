@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { motion } from 'framer-motion';
 import {
   Sun, Moon, User, Shield,
-  Palette, Monitor,
+  Palette, Monitor, Mail, Download, Loader,
 } from 'lucide-react';
 import { useTheme } from '../contexts/ThemeContext';
 import { useAuth } from '../contexts/AuthContext';
@@ -14,6 +14,53 @@ export default function Settings() {
   const { user, updateUser } = useAuth();
   const { addToast } = useToast();
   const [username, setUsername] = useState(user?.username || '');
+  const [sendingReport, setSendingReport] = useState(false);
+  const [downloadingReport, setDownloadingReport] = useState(false);
+
+  const handleSendReport = async () => {
+    setSendingReport(true);
+    try {
+      const res = await api.post<{ sent: boolean; message: string; email: string; smtp_configured: boolean }>('/reports/send');
+      if (res.sent) {
+        addToast({ type: 'success', title: 'Report sent', message: `PDF report emailed to ${res.email}` });
+      } else {
+        addToast({
+          type: 'error',
+          title: 'Email not sent',
+          message: res.smtp_configured
+            ? res.message
+            : 'Email sending is not configured. Fill in GMAIL_USER + GMAIL_APP_PASSWORD in backend/.env and restart the server, or use Download instead.',
+        });
+      }
+    } catch {
+      addToast({ type: 'error', title: 'Error', message: 'Failed to generate report.' });
+    } finally {
+      setSendingReport(false);
+    }
+  };
+
+  const handleDownloadReport = async () => {
+    setDownloadingReport(true);
+    try {
+      const token = api.getToken();
+      const res = await fetch('/api/reports/download', {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      });
+      if (!res.ok) throw new Error('Download failed');
+      const blob = await res.blob();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = `sentinaliq-report-${user?.username || 'user'}.pdf`;
+      a.click();
+      URL.revokeObjectURL(url);
+      addToast({ type: 'success', title: 'Report downloaded', message: 'Your PDF report has been downloaded.' });
+    } catch {
+      addToast({ type: 'error', title: 'Error', message: 'Failed to download report.' });
+    } finally {
+      setDownloadingReport(false);
+    }
+  };
 
   const handleSaveProfile = async () => {
     try {
@@ -111,6 +158,48 @@ export default function Settings() {
           <div>
             <label style={{ display: 'block', fontSize: 'var(--font-size-sm)', fontWeight: 500, marginBottom: 6, color: 'var(--text-secondary)' }}>Email</label>
             <input type="email" className="input" value={user?.email || ''} disabled style={{ maxWidth: 300, opacity: 0.6 }} />
+          </div>
+
+          {/* Activity Report */}
+          <div style={{
+            padding: '16px 18px',
+            background: 'var(--bg-secondary)',
+            borderRadius: 'var(--border-radius-md)',
+            border: 'var(--border-primary)',
+          }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 10, marginBottom: 8 }}>
+              <Mail size={18} style={{ color: 'var(--accent-primary)' }} />
+              <div style={{ fontWeight: 600, fontSize: 'var(--font-size-sm)' }}>Email Reports</div>
+            </div>
+            <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-tertiary)', marginBottom: 14, lineHeight: 1.5 }}>
+              Generate a PDF summary of your activity — monitored websites, URL scans, file uploads,
+              monitoring events, and incidents — and have it emailed to{' '}
+              <strong style={{ color: 'var(--text-secondary)' }}>{user?.email || 'your registered email'}</strong>.
+            </p>
+            <div style={{ display: 'flex', gap: 10, flexWrap: 'wrap' }}>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleSendReport}
+                disabled={sendingReport}
+                className="btn btn-primary btn-sm"
+                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                {sendingReport ? <Loader size={14} className="loading-spinner" /> : <Mail size={14} />}
+                {sendingReport ? 'Sending...' : 'Send Report to Email'}
+              </motion.button>
+              <motion.button
+                whileHover={{ scale: 1.02 }}
+                whileTap={{ scale: 0.98 }}
+                onClick={handleDownloadReport}
+                disabled={downloadingReport}
+                className="btn btn-sm btn-secondary"
+                style={{ display: 'flex', alignItems: 'center', gap: 6 }}
+              >
+                {downloadingReport ? <Loader size={14} className="loading-spinner" /> : <Download size={14} />}
+                {downloadingReport ? 'Downloading...' : 'Download PDF'}
+              </motion.button>
+            </div>
           </div>
           <div>
             <label style={{ display: 'block', fontSize: 'var(--font-size-sm)', fontWeight: 500, marginBottom: 6, color: 'var(--text-secondary)' }}>Role</label>

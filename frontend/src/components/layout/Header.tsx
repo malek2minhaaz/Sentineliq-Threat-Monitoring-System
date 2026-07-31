@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bell, Search, Menu, Sun, Moon,
-  CheckCheck, Trash2, AlertTriangle, Info, AlertCircle,
+  CheckCheck, Trash2, AlertTriangle, Info, AlertCircle, LogOut,
 } from 'lucide-react';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { useTheme } from '../../contexts/ThemeContext';
@@ -16,7 +16,7 @@ interface HeaderProps {
 export default function Header({ onMenuClick, onCommandPalette }: HeaderProps) {
   const { notifications, unreadCount, markRead, markAllRead, clearAll } = useNotifications();
   const { theme, toggleTheme } = useTheme();
-  const { user } = useAuth();
+  const { user, logout } = useAuth();
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
@@ -322,11 +322,37 @@ export default function Header({ onMenuClick, onCommandPalette }: HeaderProps) {
         >
           {user?.username?.charAt(0).toUpperCase() || 'U'}
         </motion.div>
+
+        {/* Logout */}
+        <motion.button
+          whileHover={{ scale: 1.05 }}
+          whileTap={{ scale: 0.95 }}
+          onClick={logout}
+          className="btn btn-sm btn-ghost"
+          title="Logout"
+          style={{
+            display: 'flex',
+            alignItems: 'center',
+            gap: 6,
+            color: 'var(--text-secondary)',
+            border: 'var(--border-primary)',
+            padding: '6px 12px',
+            borderRadius: 'var(--border-radius-sm)',
+            fontSize: 'var(--font-size-xs)',
+            marginLeft: 4,
+          }}
+          onMouseEnter={e => { (e.currentTarget as HTMLElement).style.color = 'var(--accent-danger)'; }}
+          onMouseLeave={e => { (e.currentTarget as HTMLElement).style.color = 'var(--text-secondary)'; }}
+        >
+          <LogOut size={14} />
+          <span className="logout-label">Logout</span>
+        </motion.button>
       </div>
 
       <style>{`
         @media (max-width: 768px) {
           .mobile-menu-btn { display: flex !important; }
+          .logout-label { display: none !important; }
         }
       `}</style>
     </header>

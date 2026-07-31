@@ -6,19 +6,25 @@ import uuid
 import random
 import re
 import hashlib
+import os
 from datetime import datetime, timezone, timedelta
 from typing import Optional
 from urllib.parse import urlparse
+
+# Load .env settings (GMAIL_USER, GMAIL_APP_PASSWORD, SMTP_*) if present
+from dotenv import load_dotenv
+load_dotenv(os.path.join(os.path.dirname(os.path.abspath(__file__)), ".env"))
 
 from fastapi import (
     FastAPI, Depends, HTTPException, WebSocket,
     WebSocketDisconnect, UploadFile, File, Form, Query, Body
 )
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import Response
 from fastapi.security import HTTPBearer
 from pydantic import BaseModel, EmailStr
 from sqlalchemy.orm import Session
-from sqlalchemy import desc, func
+from sqlalchemy import desc, func, or_
 
 from models import (
     init_db, SessionLocal, User, Incident, LogEvent, ThreatIntel,
@@ -30,6 +36,7 @@ from auth import (
     hash_password, verify_password, create_access_token,
     create_refresh_token, decode_token, get_current_user, get_db
 )
+from reporting import build_user_report_pdf, send_report_email, is_smtp_configured
 
 
 app = FastAPI(title="SentinalIQ API", version="1.0.0")
@@ -82,9 +89,38 @@ class WidgetReorder(BaseModel):
 
 # ─── Events / Startup ──────────────────────────────────────────────────────
 
+def ensure_admin_user(db: Session):
+    """Create the built-in admin account if it doesn't exist, or promote
+    an existing account with that username to the admin role."""
+    admin = db.query(User).filter(User.username == "admin2004").first()
+    if not admin:
+        admin = User(
+            id=generate_uuid(),
+            email="admin2004@sentinaliq.io",
+            username="admin2004",
+            hashed_password=hash_password("admin2412"),
+            role="admin",
+            is_verified=True,
+        )
+        db.add(admin)
+        db.commit()
+        print("[Admin] Created built-in admin user 'admin2004'")
+    elif admin.role != "admin":
+        admin.role = "admin"
+        admin.is_verified = True
+        db.commit()
+        print("[Admin] Promoted existing user 'admin2004' to admin role")
+    return admin
+
+
 @app.on_event("startup")
 def on_startup():
     init_db()
+    db = SessionLocal()
+    try:
+        ensure_admin_user(db)
+    finally:
+        db.close()
     print("SentinalIQ API server started")
 
 
@@ -132,6 +168,70 @@ def me(payload: dict = Depends(get_current_user), db: Session = Depends(get_db))
     if not user:
         raise HTTPException(404, "User not found")
     return user.to_dict()
+
+
+# ─── Admin Panel ───────────────────────────────────────────────────────────
+
+def require_admin(payload: dict = Depends(get_current_user)):
+    if payload.get("role") != "admin":
+        raise HTTPException(403, "Admin access required")
+    return payload
+
+
+@app.get("/api/admin/stats")
+def admin_stats(payload: dict = Depends(require_admin), db: Session = Depends(get_db)):
+    """Platform-wide stats for the admin panel."""
+    total_users = db.query(User).count()
+    total_websites = db.query(WebsiteMonitor).count()
+    total_url_scans = db.query(IngestionRecord).filter(IngestionRecord.type == "url_scan").count()
+    total_file_uploads = db.query(IngestionRecord).filter(IngestionRecord.type == "file_upload").count()
+    total_records_imported = db.query(func.coalesce(func.sum(IngestionRecord.records_count), 0)).scalar()
+    total_incidents = db.query(Incident).count()
+    total_iocs = db.query(ThreatIntel).filter(ThreatIntel.is_active == True).count()
+    total_monitor_events = db.query(MonitorEvent).count()
+    total_log_events = db.query(LogEvent).count()
+    return {
+        "total_users": total_users,
+        "total_websites": total_websites,
+        "total_url_scans": total_url_scans,
+        "total_file_uploads": total_file_uploads,
+        "total_records_imported": total_records_imported or 0,
+        "total_incidents": total_incidents,
+        "total_iocs": total_iocs,
+        "total_monitor_events": total_monitor_events,
+        "total_log_events": total_log_events,
+    }
+
+
+@app.get("/api/admin/users")
+def admin_users(payload: dict = Depends(require_admin), db: Session = Depends(get_db)):
+    """All users with their per-user activity counts."""
+    users = db.query(User).order_by(User.created_at).all()
+    items = []
+    for u in users:
+        websites = db.query(WebsiteMonitor).filter(WebsiteMonitor.user_id == u.id).count()
+        url_scans = db.query(IngestionRecord).filter(
+            IngestionRecord.user_id == u.id, IngestionRecord.type == "url_scan"
+        ).count()
+        file_uploads = db.query(IngestionRecord).filter(
+            IngestionRecord.user_id == u.id, IngestionRecord.type == "file_upload"
+        ).count()
+        incidents = db.query(Incident).filter(Incident.user_id == u.id).count()
+        monitor_events = db.query(MonitorEvent).filter(MonitorEvent.user_id == u.id).count()
+        items.append({
+            "id": u.id,
+            "username": u.username,
+            "email": u.email,
+            "role": u.role,
+            "is_verified": u.is_verified,
+            "created_at": u.created_at.isoformat() if u.created_at else None,
+            "websites_scanned": websites,
+            "url_scans": url_scans,
+            "file_uploads": file_uploads,
+            "incidents": incidents,
+            "monitor_events": monitor_events,
+        })
+    return {"items": items, "total": len(items)}
 
 
 # ─── Dashboard Stats ───────────────────────────────────────────────────────
@@ -215,6 +315,8 @@ def recent_activity(limit: int = 20, payload: dict = Depends(get_current_user), 
     ingests = db.query(IngestionRecord).filter(
         IngestionRecord.user_id == user_id
     ).order_by(desc(IngestionRecord.created_at)).limit(5).all()
+    # Convert ORM objects to dicts before merging (LogEvent has no .get())
+    events = [e.to_dict() for e in events]
     # Convert ingestion records to activity format
     ingest_activity = []
     for rec in ingests:
@@ -375,7 +477,73 @@ def list_threats(
         )
     total = query.count()
     items = query.order_by(desc(ThreatIntel.last_seen)).offset((page - 1) * limit).limit(limit).all()
-    return {"items": [t.to_dict() for t in items], "total": total, "page": page, "limit": limit}
+    enriched = _enrich_threats_with_logs(items, db)
+    return {"items": enriched, "total": total, "page": page, "limit": limit}
+
+
+def _enrich_threats_with_logs(items, db: Session):
+    """Attach related log-event intelligence to each threat IOC.
+
+    For each IOC we find log events that reference it (source IP match for
+    IP-type IOCs; message / endpoint / raw payload substring match for the
+    rest) and attach: the recent matching events, a total count, and a
+    severity breakdown — so the Threat Intel page can show where and how
+    often this indicator has shown up in live logs.
+    """
+    if not items:
+        return []
+
+    # Single batched query: gather every log event that could relate to any IOC.
+    # NOTE: the clauses below must stay in sync with the per-IOC re-filter in
+    # the loop further down (same match rules: exact source_ip for ip-type,
+    # substring on message/endpoint/raw_data otherwise).
+    clauses = []
+    for t in items:
+        v = (t.ioc_value or "").strip()
+        if not v:
+            continue
+        if t.ioc_type == "ip":
+            clauses.append(LogEvent.source_ip == v)
+        # Only substring-match values long enough to be meaningful
+        if len(v) >= 3:
+            clauses.append(LogEvent.message.ilike(f"%{v}%"))
+            clauses.append(LogEvent.endpoint.ilike(f"%{v}%"))
+            clauses.append(LogEvent.raw_data.ilike(f"%{v}%"))
+
+    logs = []
+    if clauses:
+        logs = (
+            db.query(LogEvent)
+            .filter(or_(*clauses))
+            .order_by(desc(LogEvent.timestamp))
+            .limit(300)
+            .all()
+        )
+
+    enriched = []
+    for t in items:
+        d = t.to_dict()
+        v = (t.ioc_value or "").strip()
+        matching = []
+        if v:
+            v_lower = v.lower()
+            for log in logs:
+                if t.ioc_type == "ip" and log.source_ip == v:
+                    matching.append(log)
+                    continue
+                # Case-insensitive to stay in parity with the ilike clauses above
+                for field in (log.message, log.endpoint, log.raw_data):
+                    if field and v_lower in field.lower():
+                        matching.append(log)
+                        break
+        severity_breakdown = {}
+        for log in matching:
+            severity_breakdown[log.severity] = severity_breakdown.get(log.severity, 0) + 1
+        d["log_events"] = [l.to_dict() for l in matching[:5]]
+        d["log_event_count"] = len(matching)
+        d["log_severity_breakdown"] = severity_breakdown
+        enriched.append(d)
+    return enriched
 
 
 @app.post("/api/threats/import")
@@ -1677,6 +1845,100 @@ def ingestion_history(
         IngestionRecord.user_id == user_id
     ).count()
     return {"items": [r.to_dict() for r in records], "total": total}
+
+
+# ─── Reports (PDF via Email) ────────────────────────────────────────────────
+
+def _collect_report_data(payload: dict, db: Session):
+    """Gather all data needed to build a user's PDF activity report.
+    Returns (user, stats, websites, ingests, monitor_events, incidents),
+    or None if the user no longer exists."""
+    user = db.query(User).filter(User.id == payload["sub"]).first()
+    if not user:
+        return None
+    stats = dashboard_stats(payload, db)
+    websites = db.query(WebsiteMonitor).filter(
+        WebsiteMonitor.user_id == user.id
+    ).order_by(desc(WebsiteMonitor.updated_at)).limit(50).all()
+    ingests = db.query(IngestionRecord).filter(
+        IngestionRecord.user_id == user.id
+    ).order_by(desc(IngestionRecord.created_at)).limit(30).all()
+    monitor_events = db.query(MonitorEvent).filter(
+        MonitorEvent.user_id == user.id
+    ).order_by(desc(MonitorEvent.timestamp)).limit(50).all()
+    incidents = db.query(Incident).filter(
+        Incident.user_id == user.id
+    ).order_by(desc(Incident.created_at)).limit(30).all()
+    return user, stats, websites, ingests, monitor_events, incidents
+
+
+def _build_report_pdf_bytes(report_data) -> bytes:
+    """Render the PDF for a _collect_report_data() result."""
+    user, stats, websites, ingests, monitor_events, incidents = report_data
+    return build_user_report_pdf(
+        user, stats,
+        [w.to_dict() for w in websites],
+        [r.to_dict() for r in ingests],
+        [e.to_dict() for e in monitor_events],
+        [i.to_dict() for i in incidents],
+    )
+
+
+@app.get("/api/reports/download")
+def download_report(
+    payload: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Generate and download the current user's PDF activity report."""
+    report_data = _collect_report_data(payload, db)
+    if report_data is None:
+        raise HTTPException(404, "User not found")
+    user = report_data[0]
+    pdf_bytes = _build_report_pdf_bytes(report_data)
+    filename = f"sentinaliq-report-{user.username}-{datetime.now(timezone.utc).strftime('%Y%m%d')}.pdf"
+    return Response(
+        content=pdf_bytes,
+        media_type="application/pdf",
+        headers={"Content-Disposition": f'attachment; filename="{filename}"'},
+    )
+
+
+@app.post("/api/reports/send")
+def send_report(
+    payload: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Email the current user's PDF activity report to their registered email."""
+    report_data = _collect_report_data(payload, db)
+    if report_data is None:
+        raise HTTPException(404, "User not found")
+    user = report_data[0]
+    if not user.email:
+        raise HTTPException(400, "No email address on file for this account")
+
+    pdf_bytes = _build_report_pdf_bytes(report_data)
+    result = send_report_email(user.email, pdf_bytes, username=user.username)
+
+    # Persist the send as a monitor/activity record for the user
+    db.add(MonitorEvent(
+        id=generate_uuid(),
+        user_id=user.id,
+        event_type="report",
+        severity="info",
+        source_ip="",
+        message=f"PDF security report {'sent to ' + user.email if result['sent'] else 'generated (email not sent: ' + result['reason'][:80] + ')'}",
+        target="email_report",
+        status="completed" if result["sent"] else "detected",
+        is_active=False,
+    ))
+    db.commit()
+
+    return {
+        "sent": result["sent"],
+        "message": result["reason"],
+        "email": user.email,
+        "smtp_configured": is_smtp_configured(),
+    }
 
 
 # ─── Notifications ─────────────────────────────────────────────────────────

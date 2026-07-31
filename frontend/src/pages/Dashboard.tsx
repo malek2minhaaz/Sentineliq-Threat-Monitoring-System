@@ -99,26 +99,22 @@ export default function Dashboard() {
 
   useEffect(() => {
     const fetchData = async () => {
-      try {
-        const [stats, vectors, severity, timeline, activity] = await Promise.all([
-          api.get<any>('/dashboard/stats'),
-          api.get<{ name: string; value: number }[]>('/dashboard/attack-vectors'),
-          api.get<{ name: string; value: number }[]>('/dashboard/severity-breakdown'),
-          api.get<{ date: string; count: number }[]>('/dashboard/incident-timeline'),
-          api.get<any[]>('/dashboard/recent-activity'),
-        ]);
-        setData({
-          stats,
-          attackVectors: vectors,
-          severityBreakdown: severity,
-          incidentTimeline: timeline,
-          recentActivity: activity || [],
-        });
-      } catch {
-        // Fall back to empty data
-      } finally {
-        setLoading(false);
-      }
+      // Fetch each endpoint independently so one failure doesn't zero out the whole dashboard
+      const [stats, vectors, severity, timeline, activity] = await Promise.all([
+        api.get<any>('/dashboard/stats').catch(() => null),
+        api.get<{ name: string; value: number }[]>('/dashboard/attack-vectors').catch(() => []),
+        api.get<{ name: string; value: number }[]>('/dashboard/severity-breakdown').catch(() => []),
+        api.get<{ date: string; count: number }[]>('/dashboard/incident-timeline').catch(() => []),
+        api.get<any[]>('/dashboard/recent-activity').catch(() => []),
+      ]);
+      setData({
+        stats,
+        attackVectors: vectors,
+        severityBreakdown: severity,
+        incidentTimeline: timeline,
+        recentActivity: activity || [],
+      });
+      setLoading(false);
     };
     fetchData();
   }, []);
