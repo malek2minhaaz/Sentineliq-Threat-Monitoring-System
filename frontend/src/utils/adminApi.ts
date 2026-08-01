@@ -50,7 +50,7 @@ async function adminRequest<T>(endpoint: string, options: RequestInit = {}): Pro
     // preserved and thrown for the AdminLogin page to display instead of a reload.
     if (token) {
       adminStorage.clear();
-      window.location.href = '/admin/login';
+      window.location.href = '/login';
     }
     const errBody = await res.text().catch(() => '');
     let message = 'Admin session expired';
@@ -67,7 +67,16 @@ async function adminRequest<T>(endpoint: string, options: RequestInit = {}): Pro
 
   if (!res.ok) {
     const errBody = await res.text();
-    throw new AdminApiError(errBody || `Request failed: ${res.status}`, res.status);
+    let message = errBody || `Request failed: ${res.status}`;
+    if (errBody && !errBody.includes('<')) {
+      try {
+        const parsed = JSON.parse(errBody);
+        message = parsed?.detail || parsed?.message || errBody;
+      } catch {
+        message = errBody;
+      }
+    }
+    throw new AdminApiError(message, res.status);
   }
 
   return res.json();
@@ -79,5 +88,14 @@ export const adminApi = {
     adminRequest<T>(endpoint, {
       method: 'POST',
       body: JSON.stringify(body),
+    }),
+  patch: <T>(endpoint: string, body?: unknown) =>
+    adminRequest<T>(endpoint, {
+      method: 'PATCH',
+      body: JSON.stringify(body),
+    }),
+  del: <T>(endpoint: string) =>
+    adminRequest<T>(endpoint, {
+      method: 'DELETE',
     }),
 };

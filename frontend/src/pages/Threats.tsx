@@ -42,16 +42,16 @@ const iocIcons: Record<string, React.ElementType> = {
 };
 
 const iocColors: Record<string, string> = {
-  ip: '#06b6d4',
-  domain: '#8b5cf6',
+  ip: '#38bdf8',
+  domain: '#60a5fa',
   hash: '#f59e0b',
   url: '#10b981',
   email: '#3b82f6',
 };
 
 const iocBgColors: Record<string, string> = {
-  ip: 'rgba(6, 182, 212, 0.1)',
-  domain: 'rgba(139, 92, 246, 0.1)',
+  ip: 'rgba(56, 189, 248, 0.1)',
+  domain: 'rgba(96, 165, 250, 0.1)',
   hash: 'rgba(245, 158, 11, 0.1)',
   url: 'rgba(16, 185, 129, 0.1)',
   email: 'rgba(59, 130, 246, 0.1)',
@@ -308,9 +308,9 @@ export default function Threats() {
                       <span className="pill" style={{
                         fontSize: 10,
                         padding: '2px 8px',
-                        background: 'rgba(6, 182, 212, 0.12)',
-                        color: '#06b6d4',
-                        border: '1px solid rgba(6, 182, 212, 0.3)',
+                        background: 'rgba(56, 189, 248, 0.12)',
+                        color: '#38bdf8',
+                        border: '1px solid rgba(56, 189, 248, 0.3)',
                       }}>
                         <Activity size={10} style={{ verticalAlign: 'middle', marginRight: 3 }} />
                         {threat.log_event_count} log{threat.log_event_count !== 1 ? 's' : ''}
@@ -409,7 +409,7 @@ export default function Threats() {
                     {((threat.log_event_count ?? 0) > 0) && (
                       <div style={{ marginTop: 12, padding: 12, background: 'var(--bg-secondary)', borderRadius: 'var(--border-radius-sm)' }}>
                         <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 8 }}>
-                          <Activity size={14} style={{ color: '#06b6d4' }} />
+                          <Activity size={14} style={{ color: '#38bdf8' }} />
                           <span className="detail-item-label" style={{ margin: 0 }}>
                             Related Log Activity
                           </span>

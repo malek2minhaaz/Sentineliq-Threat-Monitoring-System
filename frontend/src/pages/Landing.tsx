@@ -46,7 +46,7 @@ function ParticleBackground() {
           const dist = Math.sqrt(dx * dx + dy * dy);
           if (dist < 150) {
             ctx.beginPath();
-            ctx.strokeStyle = `rgba(6, 182, 212, ${0.08 * (1 - dist / 150)})`;
+            ctx.strokeStyle = `rgba(56, 189, 248, ${0.08 * (1 - dist / 150)})`;
             ctx.lineWidth = 0.5;
             ctx.moveTo(particles[i].x, particles[i].y);
             ctx.lineTo(particles[j].x, particles[j].y);
@@ -59,7 +59,7 @@ function ParticleBackground() {
       particles.forEach(p => {
         ctx.beginPath();
         ctx.arc(p.x, p.y, p.size, 0, Math.PI * 2);
-        ctx.fillStyle = `rgba(6, 182, 212, ${p.alpha})`;
+        ctx.fillStyle = `rgba(56, 189, 248, ${p.alpha})`;
         ctx.fill();
 
         p.x += p.vx;
@@ -184,8 +184,8 @@ export default function Landing() {
               display: 'inline-block',
               padding: '8px 20px',
               borderRadius: 999,
-              background: 'rgba(6, 182, 212, 0.1)',
-              border: '1px solid rgba(6, 182, 212, 0.2)',
+              background: 'rgba(56, 189, 248, 0.1)',
+              border: '1px solid rgba(56, 189, 248, 0.2)',
               fontSize: 'var(--font-size-sm)',
               color: 'var(--accent-primary)',
               marginBottom: 24,
@@ -313,7 +313,7 @@ export default function Landing() {
                     width: 48,
                     height: 48,
                     borderRadius: 12,
-                    background: 'rgba(6, 182, 212, 0.1)',
+                    background: 'rgba(56, 189, 248, 0.1)',
                     display: 'flex',
                     alignItems: 'center',
                     justifyContent: 'center',

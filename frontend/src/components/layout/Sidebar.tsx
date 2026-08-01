@@ -52,7 +52,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
           >
             <div style={{
               width: 32, height: 32, borderRadius: 8,
-              background: 'rgba(6, 182, 212, 0.1)',
+              background: 'rgba(56, 189, 248, 0.1)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
             }}>
               <Shield size={18} style={{ color: 'var(--accent-primary)' }} />
@@ -69,7 +69,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
         ) : (
           <div style={{
             width: 32, height: 32, borderRadius: 8,
-            background: 'rgba(6, 182, 212, 0.1)',
+            background: 'rgba(56, 189, 248, 0.1)',
             display: 'flex', alignItems: 'center', justifyContent: 'center',
           }}>
             <Shield size={18} style={{ color: 'var(--accent-primary)' }} />
@@ -112,7 +112,7 @@ export default function Sidebar({ collapsed, onToggle, mobileOpen, onMobileClose
                 borderRadius: 'var(--border-radius-sm)',
                 textDecoration: 'none',
                 color: isActive ? 'var(--accent-primary)' : 'var(--text-secondary)',
-                background: isActive ? 'rgba(6, 182, 212, 0.08)' : 'transparent',
+                background: isActive ? 'rgba(56, 189, 248, 0.08)' : 'transparent',
                 justifyContent: collapsed ? 'center' : 'flex-start',
                 position: 'relative',
                 transition: 'all 150ms ease',

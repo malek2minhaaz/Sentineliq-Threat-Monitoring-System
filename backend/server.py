@@ -2,6 +2,8 @@
 
 import json
 import asyncio
+import csv
+import io
 import uuid
 import random
 import re
@@ -81,6 +83,14 @@ class IncidentUpdate(BaseModel):
     description: Optional[str] = None
     severity: Optional[str] = None
     status: Optional[str] = None
+
+class AdminUserUpdate(BaseModel):
+    role: Optional[str] = None
+    is_active: Optional[bool] = None
+    is_verified: Optional[bool] = None
+
+class AdminPasswordReset(BaseModel):
+    new_password: str
     assignee: Optional[str] = None
 
 class WidgetReorder(BaseModel):
@@ -113,12 +123,39 @@ def ensure_admin_user(db: Session):
     return admin
 
 
+def ensure_demo_user(db: Session):
+    """Create a built-in normal (analyst) demo account so the regular
+    dashboard login always has a known account, mirroring the admin bootstrap."""
+    demo = db.query(User).filter(User.username == "demo").first()
+    if not demo:
+        demo = User(
+            id=generate_uuid(),
+            email="demo@sentinaliq.io",
+            username="demo",
+            hashed_password=hash_password("demo123"),
+            role="analyst",
+            is_verified=True,
+        )
+        db.add(demo)
+        db.commit()
+        print("[Demo] Created built-in normal user 'demo'")
+    elif not demo.is_verified or demo.role not in ("analyst", "admin"):
+        # If an account with this username already exists, make sure it stays
+        # usable as the demo dashboard account.
+        demo.is_verified = True
+        demo.role = demo.role if demo.role == "admin" else "analyst"
+        db.commit()
+        print("[Demo] Ensured existing user 'demo' is a verified normal account")
+    return demo
+
+
 @app.on_event("startup")
 def on_startup():
     init_db()
     db = SessionLocal()
     try:
         ensure_admin_user(db)
+        ensure_demo_user(db)
     finally:
         db.close()
     print("SentinalIQ API server started")
@@ -151,6 +188,8 @@ def login(req: LoginRequest, db: Session = Depends(get_db)):
     user = db.query(User).filter(User.username == req.username).first()
     if not user or not verify_password(req.password, user.hashed_password):
         raise HTTPException(401, "Invalid credentials")
+    if not user.is_active:
+        raise HTTPException(403, "Account suspended. Contact an administrator.")
     token = create_access_token({"sub": user.id, "role": user.role})
     refresh = create_refresh_token({"sub": user.id})
     return TokenResponse(access_token=token, refresh_token=refresh, user=user.to_dict())
@@ -224,6 +263,7 @@ def admin_users(payload: dict = Depends(require_admin), db: Session = Depends(ge
             "email": u.email,
             "role": u.role,
             "is_verified": u.is_verified,
+            "is_active": u.is_active,
             "created_at": u.created_at.isoformat() if u.created_at else None,
             "websites_scanned": websites,
             "url_scans": url_scans,
@@ -232,6 +272,143 @@ def admin_users(payload: dict = Depends(require_admin), db: Session = Depends(ge
             "monitor_events": monitor_events,
         })
     return {"items": items, "total": len(items)}
+
+
+@app.get("/api/admin/users/{user_id}")
+def admin_user_detail(user_id: str, payload: dict = Depends(require_admin), db: Session = Depends(get_db)):
+    """Full profile + recent activity for a single user."""
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        raise HTTPException(404, "User not found")
+    websites = db.query(WebsiteMonitor).filter(WebsiteMonitor.user_id == u.id).count()
+    url_scans = db.query(IngestionRecord).filter(
+        IngestionRecord.user_id == u.id, IngestionRecord.type == "url_scan"
+    ).count()
+    file_uploads = db.query(IngestionRecord).filter(
+        IngestionRecord.user_id == u.id, IngestionRecord.type == "file_upload"
+    ).count()
+    incidents = db.query(Incident).filter(Incident.user_id == u.id).count()
+    monitor_events = db.query(MonitorEvent).filter(MonitorEvent.user_id == u.id).count()
+    recent_incidents = [
+        i.to_dict() for i in db.query(Incident).filter(Incident.user_id == u.id)
+        .order_by(desc(Incident.created_at)).limit(5).all()
+    ]
+    recent_uploads = [
+        r.to_dict() for r in db.query(IngestionRecord).filter(IngestionRecord.user_id == u.id)
+        .order_by(desc(IngestionRecord.created_at)).limit(5).all()
+    ]
+    recent_events = [
+        e.to_dict() for e in db.query(MonitorEvent).filter(MonitorEvent.user_id == u.id)
+        .order_by(desc(MonitorEvent.timestamp)).limit(5).all()
+    ]
+    return {
+        "id": u.id,
+        "username": u.username,
+        "email": u.email,
+        "role": u.role,
+        "is_verified": u.is_verified,
+        "is_active": u.is_active,
+        "theme": u.theme,
+        "avatar": u.avatar,
+        "created_at": u.created_at.isoformat() if u.created_at else None,
+        "websites_scanned": websites,
+        "url_scans": url_scans,
+        "file_uploads": file_uploads,
+        "incidents": incidents,
+        "monitor_events": monitor_events,
+        "recent_incidents": recent_incidents,
+        "recent_uploads": recent_uploads,
+        "recent_events": recent_events,
+    }
+
+
+@app.patch("/api/admin/users/{user_id}")
+def admin_update_user(user_id: str, req: AdminUserUpdate, payload: dict = Depends(require_admin), db: Session = Depends(get_db)):
+    """Update a user's role, active status, or verification."""
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        raise HTTPException(404, "User not found")
+    # Prevent the admin from locking themselves out
+    if u.id == payload.get("sub"):
+        if req.role is not None and req.role != "admin":
+            raise HTTPException(400, "You cannot change your own role")
+        if req.is_active is False:
+            raise HTTPException(400, "You cannot suspend your own account")
+    if req.role is not None:
+        u.role = req.role
+    if req.is_active is not None:
+        u.is_active = req.is_active
+    if req.is_verified is not None:
+        u.is_verified = req.is_verified
+    db.commit()
+    return {"ok": True, "user": u.to_dict()}
+
+
+@app.post("/api/admin/users/{user_id}/reset-password")
+def admin_reset_password(user_id: str, req: AdminPasswordReset, payload: dict = Depends(require_admin), db: Session = Depends(get_db)):
+    """Reset a user's password to a new value."""
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        raise HTTPException(404, "User not found")
+    if len(req.new_password) < 6:
+        raise HTTPException(400, "Password must be at least 6 characters")
+    u.hashed_password = hash_password(req.new_password)
+    db.commit()
+    return {"ok": True, "message": f"Password reset for {u.username}"}
+
+
+@app.delete("/api/admin/users/{user_id}")
+def admin_delete_user(user_id: str, payload: dict = Depends(require_admin), db: Session = Depends(get_db)):
+    """Delete a user account and their associated data."""
+    u = db.query(User).filter(User.id == user_id).first()
+    if not u:
+        raise HTTPException(404, "User not found")
+    if u.id == payload.get("sub"):
+        raise HTTPException(400, "You cannot delete your own account")
+    db.query(WebsiteMonitor).filter(WebsiteMonitor.user_id == u.id).delete()
+    db.query(IngestionRecord).filter(IngestionRecord.user_id == u.id).delete()
+    db.query(Incident).filter(Incident.user_id == u.id).delete()
+    db.query(MonitorEvent).filter(MonitorEvent.user_id == u.id).delete()
+    db.query(Notification).filter(Notification.user_id == u.id).delete()
+    db.query(DashboardWidget).filter(DashboardWidget.user_id == u.id).delete()
+    db.delete(u)
+    db.commit()
+    return {"ok": True, "message": f"Deleted user {u.username}"}
+
+
+@app.get("/api/admin/export/users")
+def admin_export_users_csv(payload: dict = Depends(require_admin), db: Session = Depends(get_db)):
+    """Export all users (with activity counts) as a CSV file."""
+    users = db.query(User).order_by(User.created_at).all()
+    buf = io.StringIO()
+    writer = csv.writer(buf)
+    writer.writerow([
+        "username", "email", "role", "verified", "active", "created_at",
+        "websites_scanned", "url_scans", "file_uploads", "incidents", "monitor_events",
+    ])
+    for u in users:
+        websites = db.query(WebsiteMonitor).filter(WebsiteMonitor.user_id == u.id).count()
+        url_scans = db.query(IngestionRecord).filter(
+            IngestionRecord.user_id == u.id, IngestionRecord.type == "url_scan"
+        ).count()
+        file_uploads = db.query(IngestionRecord).filter(
+            IngestionRecord.user_id == u.id, IngestionRecord.type == "file_upload"
+        ).count()
+        incidents = db.query(Incident).filter(Incident.user_id == u.id).count()
+        monitor_events = db.query(MonitorEvent).filter(MonitorEvent.user_id == u.id).count()
+        writer.writerow([
+            u.username, u.email, u.role,
+            "yes" if u.is_verified else "no",
+            "yes" if u.is_active else "no",
+            u.created_at.isoformat() if u.created_at else "",
+            websites, url_scans, file_uploads, incidents, monitor_events,
+        ])
+    csv_data = buf.getvalue()
+    return Response(
+        content=csv_data,
+        media_type="text/csv",
+        headers={"Content-Disposition": 'attachment; filename="sentinaliq_users.csv"'},
+    )
 
 
 # ─── Dashboard Stats ───────────────────────────────────────────────────────
@@ -627,6 +804,231 @@ def get_endpoint(endpoint_id: str, payload: dict = Depends(get_current_user), db
     if not endpoint:
         raise HTTPException(404, "Endpoint not found")
     return endpoint.to_dict()
+
+
+# ─── EDR Response Actions ───────────────────────────────────────────────────
+
+def _append_endpoint_action(endpoint: Endpoint, action: str, detail: str):
+    """Append an entry to the endpoint's action history (JSON list)."""
+    history = []
+    try:
+        history = json.loads(endpoint.action_history) if endpoint.action_history else []
+    except json.JSONDecodeError:
+        history = []
+    history.append({
+        "action": action,
+        "detail": detail,
+        "timestamp": datetime.now(timezone.utc).isoformat(),
+    })
+    endpoint.action_history = json.dumps(history[-50:])  # keep last 50
+
+
+def _get_endpoint_or_404(endpoint_id: str, db: Session) -> Endpoint:
+    endpoint = db.query(Endpoint).filter(Endpoint.id == endpoint_id).first()
+    if not endpoint:
+        raise HTTPException(404, "Endpoint not found")
+    return endpoint
+
+
+@app.post("/api/endpoints/{endpoint_id}/isolate")
+def isolate_endpoint(
+    endpoint_id: str,
+    data: dict = Body(...),
+    payload: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Isolate / quarantine an endpoint from the network."""
+    endpoint = _get_endpoint_or_404(endpoint_id, db)
+    if endpoint.isolated:
+        raise HTTPException(400, "Endpoint is already isolated")
+    reason = (data.get("reason") or "Suspicious activity detected").strip()
+    endpoint.isolated = True
+    endpoint.isolation_reason = reason
+    endpoint.isolation_started_at = datetime.now(timezone.utc)
+    endpoint.status = "compromised"
+    endpoint.risk_score = max(endpoint.risk_score, 70)
+    _append_endpoint_action(endpoint, "isolate", f"Endpoint isolated: {reason}")
+    db.commit()
+    return endpoint.to_dict()
+
+
+@app.post("/api/endpoints/{endpoint_id}/unisolate")
+def unisolate_endpoint(
+    endpoint_id: str,
+    payload: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Release an endpoint back onto the network after it has been cleared."""
+    endpoint = _get_endpoint_or_404(endpoint_id, db)
+    if not endpoint.isolated:
+        raise HTTPException(400, "Endpoint is not isolated")
+    endpoint.isolated = False
+    endpoint.isolation_reason = ""
+    endpoint.isolation_started_at = None
+    endpoint.status = "online"
+    endpoint.risk_score = max(0, endpoint.risk_score - 40)
+    _append_endpoint_action(endpoint, "unisolate", "Endpoint released and restored to network")
+    db.commit()
+    return endpoint.to_dict()
+
+
+@app.post("/api/endpoints/{endpoint_id}/scan")
+def scan_endpoint(
+    endpoint_id: str,
+    data: dict = Body(default={}),
+    payload: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Run a quick or full scan on the endpoint. Simulates findings and
+    adjusts the risk score based on what was found."""
+    endpoint = _get_endpoint_or_404(endpoint_id, db)
+    scan_type = (data.get("type") or "quick").lower()
+    if scan_type not in ("quick", "full"):
+        raise HTTPException(400, "Scan type must be 'quick' or 'full'")
+
+    # Simulate scan findings
+    malware_names = ["Emotet", "Cobalt Strike", "TrickBot", "Ryuk", "LockBit", "Agent Tesla"]
+    found = []
+    score_delta = 0
+    if endpoint.isolated:
+        score_delta = -random.randint(2, 8)
+    elif endpoint.status == "compromised":
+        score_delta = random.randint(2, 15)
+        found = random.sample(malware_names, k=random.randint(1, 3))
+    elif endpoint.risk_score > 50:
+        score_delta = random.randint(-5, 10)
+        if random.random() < 0.5:
+            found = [random.choice(malware_names)]
+    else:
+        score_delta = random.randint(-10, 2)
+        if random.random() < 0.15:
+            found = [random.choice(malware_names)]
+
+    endpoint.risk_score = max(0, min(100, endpoint.risk_score + score_delta))
+    endpoint.last_seen = datetime.now(timezone.utc)
+    _append_endpoint_action(
+        endpoint,
+        "scan",
+        f"{scan_type.title()} scan completed — {len(found)} threat(s) found: {", ".join(found) if found else "none"}",
+    )
+    db.commit()
+    return {
+        **endpoint.to_dict(),
+        "scan_type": scan_type,
+        "findings": found,
+        "score_delta": score_delta,
+        "message": f"{scan_type.title()} scan complete: {len(found)} threat(s) detected" if found else f"{scan_type.title()} scan complete: endpoint clean",
+    }
+
+
+@app.post("/api/endpoints/{endpoint_id}/kill-process")
+def kill_process(
+    endpoint_id: str,
+    data: dict = Body(...),
+    payload: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Terminate a suspicious process on the endpoint."""
+    endpoint = _get_endpoint_or_404(endpoint_id, db)
+    process = (data.get("process") or "").strip()
+    if not process:
+        raise HTTPException(400, "Process name is required")
+    endpoint.running_processes = max(0, endpoint.running_processes - 1)
+    endpoint.risk_score = max(0, endpoint.risk_score - random.randint(3, 10))
+    _append_endpoint_action(endpoint, "kill_process", f"Terminated process: {process}")
+    db.commit()
+    return endpoint.to_dict()
+
+
+@app.post("/api/endpoints/{endpoint_id}/block-ip")
+def block_ip(
+    endpoint_id: str,
+    data: dict = Body(...),
+    payload: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Block a malicious source IP — adds it to Threat Intel (IOC) and
+    creates a WAF rule so the block is enforced at the edge too (XDR)."""
+    endpoint = _get_endpoint_or_404(endpoint_id, db)
+    ip = (data.get("ip") or "").strip()
+    if not ip:
+        raise HTTPException(400, "IP address is required")
+
+    # Add as IOC to threat intel
+    existing_ioc = db.query(ThreatIntel).filter(
+        ThreatIntel.ioc_type == "ip", ThreatIntel.ioc_value == ip
+    ).first()
+    if not existing_ioc:
+        db.add(ThreatIntel(
+            id=generate_uuid(),
+            ioc_type="ip",
+            ioc_value=ip,
+            confidence="high",
+            severity="high",
+            description=f"IP blocked via EDR response from endpoint {endpoint.hostname}.",
+            source="edr_response",
+            tags="blocked,edr",
+        ))
+
+    # Add / update a WAF rule for the IP
+    waf = db.query(WAFRule).filter(WAFRule.pattern == ip).first()
+    if not waf:
+        db.add(WAFRule(
+            id=generate_uuid(),
+            name=f"Block malicious IP {ip}",
+            description=f"EDR response: block traffic from {ip} (linked to {endpoint.hostname}).",
+            category="ip-reputation",
+            action="block",
+            priority=1,
+            pattern=ip,
+            is_active=True,
+        ))
+
+    endpoint.risk_score = max(0, endpoint.risk_score - random.randint(2, 8))
+    _append_endpoint_action(endpoint, "block_ip", f"Blocked source IP {ip} (IOC + WAF rule created)")
+    db.commit()
+    return {
+        **endpoint.to_dict(),
+        "message": f"IP {ip} blocked — added to Threat Intel and WAF rules",
+    }
+
+
+@app.post("/api/endpoints/{endpoint_id}/escalate")
+def escalate_endpoint(
+    endpoint_id: str,
+    data: dict = Body(...),
+    payload: dict = Depends(get_current_user),
+    db: Session = Depends(get_db),
+):
+    """Escalate the endpoint to a full security Incident."""
+    endpoint = _get_endpoint_or_404(endpoint_id, db)
+    severity = (data.get("severity") or "high").lower()
+    if severity not in ("low", "medium", "high", "critical"):
+        raise HTTPException(400, "Severity must be low, medium, high or critical")
+    note = (data.get("note") or "").strip()
+
+    incident = Incident(
+        id=generate_uuid(),
+        user_id=payload["sub"],
+        title=f"EDR escalation: {endpoint.hostname}",
+        description=(
+            f"Endpoint {endpoint.hostname} ({endpoint.ip_address}) escalated from EDR response. "
+            f"Status: {endpoint.status}, risk score: {round(endpoint.risk_score)}."
+            + (f" Notes: {note}" if note else "")
+        ),
+        severity=severity,
+        status="open",
+        source="EDR",
+        category="Endpoint",
+    )
+    db.add(incident)
+    _append_endpoint_action(endpoint, "escalate", f"Escalated to incident ({severity})")
+    db.commit()
+    return {
+        **endpoint.to_dict(),
+        "incident": incident.to_dict(),
+        "message": f"Endpoint escalated to {severity} severity incident",
+    }
 
 
 # ─── WAF ───────────────────────────────────────────────────────────────────
@@ -2031,47 +2433,177 @@ def copilot_chat(
     payload: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    message = data.get("message", "").lower()
+    message = (data.get("message") or "").strip()
     context = data.get("context", "")
+    history = data.get("history") or []
 
-    # Provide intelligent responses based on security context
-    recent_incidents = db.query(Incident).order_by(desc(Incident.created_at)).limit(5).all()
-    stats = db.query(Incident).count()
-    critical = db.query(Incident).filter(Incident.severity == "critical").count()
-    open_count = db.query(Incident).filter(Incident.status == "open").count()
-
-    response = generate_copilot_response(message, stats, critical, open_count, recent_incidents, context)
+    response = generate_copilot_response(message, context, history, db)
     return {"response": response, "timestamp": datetime.now(timezone.utc).isoformat()}
 
 
-def generate_copilot_response(message: str, total: int, critical: int, open_count: int,
-                               recent_incidents: list, context: str) -> str:
-    if "incident" in message or "alert" in message:
+def _copilot_help() -> str:
+    return (
+        "I'm SentinalIQ Copilot! I can help you with:\n"
+        "🔍 **Incidents** - \"show incidents\" / \"how many open\"\n"
+        "🛡️ **Threat Intel** - \"list IOCs\" / \"show IP indicators\"\n"
+        "💻 **EDR** - \"compromised endpoints\" / \"which hosts are isolated\"\n"
+        "📋 **Logs** - \"recent events\" / \"critical logs\"\n"
+        "🌐 **WAF** - \"waf rules\" / \"blocked traffic\"\n"
+        "📊 **Security posture** - \"summary\" / \"status\"\n\n"
+        "Try asking me something specific about your security data!"
+    )
+
+
+def generate_copilot_response(message: str, context: str, history: list, db: Session) -> str:
+    msg = message.lower()
+    page = context or ""
+
+    # ── Resolve short follow-ups using the last user message ──────────────
+    follow_ups = re.search(r"^(yes|yeah|ok|okay|sure|show (me|them)|more|list them|details?)$", msg.strip())
+    if follow_ups:
+        for h in reversed(history):
+            if isinstance(h, dict) and h.get("role") == "user":
+                msg = (h.get("content") or "").lower() + " " + msg
+                break
+
+    # ── Greetings ─────────────────────────────────────────────────────────
+    if re.search(r"\b(hi|hello|hey|yo|good (morning|afternoon|evening))\b", msg):
         return (
-            f"There are currently **{total} total incidents** in the system, "
-            f"with **{critical} critical** and **{open_count} open** requiring attention. "
-            f"The most recent is: \"{recent_incidents[0].title if recent_incidents else 'N/A'}\" "
-            f"(Severity: {recent_incidents[0].severity if recent_incidents else 'N/A'}). "
-            f"Would you like me to help you investigate or draft a response?"
+            "Hello! 👋 I'm your SentinalIQ Copilot. I can pull live data from your "
+            "incidents, threat intel, endpoints, logs and WAF rules. "
+            "Try \"**show incidents**\", \"**list IOCs**\" or \"**compromised endpoints**\"."
         )
-    elif "threat" in message or "ioc" in message or "intel" in message:
-        return "I can help you analyze threat intelligence data. We have IOCs including IP addresses, domains, file hashes, and email indicators. Would you like to search for specific threats or get a summary of recent intelligence?"
-    elif "endpoint" in message or "edr" in message or "device" in message:
-        return "The EDR module is tracking multiple endpoints across your network. I can help you identify compromised hosts, review endpoint telemetry, or investigate suspicious processes. Which endpoint would you like to look into?"
-    elif "log" in message or "event" in message:
-        return "You can explore the Log Explorer to search through thousands of security events. I can help you filter by severity, source, or event type. Try searching for specific IP addresses or error patterns."
-    elif "waf" in message or "firewall" in message or "web" in message:
-        return "The WAF is actively blocking malicious requests. There are several rule categories active including SQL injection, XSS, and path traversal prevention. Would you like a summary of blocked traffic or help tuning a rule?"
-    elif "setting" in message or "config" in message:
-        return "You can configure your profile settings, notification preferences, and theme (dark/light) in the Settings page. Would you like me to guide you through any specific configuration?"
-    elif "help" in message or "what" in message:
-        return "I'm SentinalIQ Copilot! I can help you with:\n🔍 **Incidents** - Review and manage security incidents\n🛡️ **Threat Intel** - Analyze IOCs and threat actors\n💻 **EDR** - Monitor endpoints and investigate threats\n📋 **Logs** - Search and filter security events\n🌐 **WAF** - Review and manage firewall rules\n⚙️ **Settings** - Configure your experience\n\nWhat would you like to explore?"
-    else:
+
+    # ── Help / capabilities ───────────────────────────────────────────────
+    if re.search(r"\b(help|what can you do|how do you work|commands|features|options)\b", msg):
+        return _copilot_help()
+
+    # ── Incidents ─────────────────────────────────────────────────────────
+    if re.search(r"\b(incidents?|alerts?|tickets?|cases?)\b", msg):
+        total = db.query(Incident).count()
+        critical = db.query(Incident).filter(Incident.severity == "critical").count()
+        high = db.query(Incident).filter(Incident.severity == "high").count()
+        open_count = db.query(Incident).filter(Incident.status == "open").count()
+        recent = db.query(Incident).order_by(desc(Incident.created_at)).limit(3).all()
+        lines = [
+            f"📊 **Incident overview**: {total} total, {critical} critical, {high} high, {open_count} open.",
+            "",
+            "**Most recent:**",
+        ]
+        for inc in recent:
+            sev_icon = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🟢"}.get(inc.severity, "⚪")
+            lines.append(f"{sev_icon} **{inc.title}** — {inc.severity}, status: {inc.status}")
+        lines.append("")
+        lines.append("Want me to escalate something or summarize a specific incident?")
+        return "\n".join(lines)
+
+    # ── Threat Intel / IOCs ───────────────────────────────────────────────
+    if re.search(r"\b(threats?|iocs?|indicators?|intel(\w*)?|malware|hash(es)?|domains?|phish\w*|actors?)\b", msg):
+        total_iocs = db.query(ThreatIntel).filter(ThreatIntel.is_active == True).count()
+        by_type = db.query(ThreatIntel.ioc_type, func.count(ThreatIntel.id)).filter(
+            ThreatIntel.is_active == True
+        ).group_by(ThreatIntel.ioc_type).all()
+        recent = db.query(ThreatIntel).filter(ThreatIntel.is_active == True).order_by(
+            desc(ThreatIntel.last_seen)
+        ).limit(5).all()
+        # If the user asked about a specific type, filter to it
+        asked_type = None
+        for t, _ in by_type:
+            if t and t in msg:
+                asked_type = t
+        type_summary = ", ".join(f"{t}: {c}" for t, c in by_type) or "none"
+        lines = [
+            f"🛡️ **Threat intelligence**: {total_iocs} active IOCs ({type_summary}).",
+            "",
+            f"**Recent indicators{' (' + asked_type + ')' if asked_type else ''}:**",
+        ]
+        matches = recent
+        if asked_type:
+            matches = db.query(ThreatIntel).filter(
+                ThreatIntel.is_active == True, ThreatIntel.ioc_type == asked_type
+            ).order_by(desc(ThreatIntel.last_seen)).limit(5).all()
+        for t in matches:
+            sev_icon = {"critical": "🔴", "high": "🟠", "medium": "🟡", "low": "🟢"}.get(t.severity, "⚪")
+            lines.append(f"{sev_icon} **{t.ioc_type.upper()}** `{t.ioc_value}` — {t.severity} ({t.confidence} confidence)")
+        if not matches:
+            lines.append("No indicators found yet — import some on the Threat Intel page.")
+        return "\n".join(lines)
+
+    # ── EDR / Endpoints ───────────────────────────────────────────────────
+    if re.search(r"\b(endpoints?|edr|hosts?|devices?|machines?|compromised|isolat\w*)\b", msg):
+        total = db.query(Endpoint).count()
+        online = db.query(Endpoint).filter(Endpoint.status == "online").count()
+        compromised = db.query(Endpoint).filter(Endpoint.status == "compromised").count()
+        isolated = db.query(Endpoint).filter(Endpoint.isolated == True).count()
+        bad = db.query(Endpoint).filter(
+            or_(Endpoint.isolated == True, Endpoint.status == "compromised")
+        ).all()
+        lines = [
+            f"💻 **Endpoint overview**: {total} endpoints — {online} online, {compromised} compromised, {isolated} isolated.",
+            "",
+            "**Endpoints needing attention:**",
+        ]
+        for ep in bad[:5]:
+            flag = "🔒 isolated" if ep.isolated else "🔴 compromised"
+            lines.append(f"• **{ep.hostname}** ({ep.ip_address}) — {flag}, risk {round(ep.risk_score)}")
+        if not bad:
+            lines.append("✅ All endpoints look healthy right now.")
+        return "\n".join(lines)
+
+    # ── Logs / Events ─────────────────────────────────────────────────────
+    if re.search(r"\b(logs?|events?|errors?|explorer)\b", msg):
+        total_events = db.query(LogEvent).count()
+        critical = db.query(LogEvent).filter(LogEvent.severity == "critical").count()
+        recent = db.query(LogEvent).order_by(desc(LogEvent.timestamp)).limit(5).all()
+        lines = [
+            f"📋 **Log events**: {total_events} total, {critical} critical severity.",
+            "",
+            "**Latest events:**",
+        ]
+        for ev in recent:
+            lines.append(f"• [`{ev.severity}`] {ev.message[:90]}")
+        return "\n".join(lines)
+
+    # ── WAF / Firewall ────────────────────────────────────────────────────
+    if re.search(r"\b(waf|firewalls?|blocked|rules?|web app)\b", msg):
+        rules = db.query(WAFRule).filter(WAFRule.is_active == True).order_by(WAFRule.priority).all()
+        total_hits = db.query(func.coalesce(func.sum(WAFRule.hits), 0)).scalar() or 0
+        active = len(rules)
+        lines = [
+            f"🌐 **WAF status**: {active} active rules, {total_hits} total blocks/hits.",
+            "",
+            "**Top rules by priority:**",
+        ]
+        for r in rules[:6]:
+            lines.append(f"• **{r.name}** — {r.action} (priority {r.priority}, {r.hits} hits)")
+        return "\n".join(lines)
+
+    # ── Settings / config ─────────────────────────────────────────────────
+    if re.search(r"\b(settings?|configs?|profile|theme|preferences?)\b", msg):
         return (
-            f"Based on current telemetry, the security posture shows **{total} incidents** "
-            f"({critical} critical). The system is actively monitoring and processing events. "
-            f"How can I assist you with your security operations today?"
+            "⚙️ You can configure your profile, notifications and theme (dark/light) "
+            "in the **Settings** page. The sidebar has a quick theme toggle too — "
+            "and Ctrl+K opens the command palette for fast navigation."
         )
+
+    # ── Security posture / summary (default) ──────────────────────────────
+    total = db.query(Incident).count()
+    critical = db.query(Incident).filter(Incident.severity == "critical").count()
+    open_count = db.query(Incident).filter(Incident.status == "open").count()
+    ioc_count = db.query(ThreatIntel).filter(ThreatIntel.is_active == True).count()
+    ep_issues = db.query(Endpoint).filter(
+        (Endpoint.status == "compromised") | (Endpoint.isolated == True)
+    ).count()
+    lines = [
+        "📊 **Security posture summary:**",
+        f"• **{total} incidents** ({critical} critical, {open_count} open)",
+        f"• **{ioc_count} active threat indicators** in threat intel",
+        f"• **{ep_issues} endpoints** flagged (compromised/isolated)",
+        "",
+        f"You're currently on **{page or 'the dashboard'}**. "
+        "Ask me to drill into any of these — e.g. \"show me the critical incidents\" or \"list IP IOCs\".",
+    ]
+    return "\n".join(lines)
 
 
 # ─── WebSocket ─────────────────────────────────────────────────────────────

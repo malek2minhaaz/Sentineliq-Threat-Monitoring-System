@@ -1,5 +1,7 @@
 /* SentinalIQ - API Client */
 
+import { adminStorage } from './adminApi';
+
 const API_BASE = '/api';
 
 interface FetchOptions extends RequestInit {
@@ -45,6 +47,11 @@ async function refreshToken(): Promise<boolean> {
     if (!res.ok) return false;
     const data = await res.json();
     localStorage.setItem('sentinaliq_token', data.access_token);
+    // Keep the mirrored admin-panel token in sync so an admin session that was
+    // seeded via the regular login doesn't go stale after a token refresh.
+    if (adminStorage.hasSession()) {
+      adminStorage.setSession(data.access_token, adminStorage.getUser());
+    }
     return true;
   } catch {
     return false;

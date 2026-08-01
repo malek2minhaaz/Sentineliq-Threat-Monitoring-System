@@ -1,19 +1,11 @@
 import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
-  Upload, Link as LinkIcon, Shield, AlertTriangle,
-  CheckCircle, Globe, ScanLine, Loader, FileText, File,
+  Upload, Shield,
+  CheckCircle, Globe, Loader, FileText, File,
   Clock, RefreshCw,
 } from 'lucide-react';
 import { api } from '../utils/api';
-
-interface ScanResult {
-  url: string;
-  scan_status: string;
-  threat_score: number;
-  findings: Array<{ type: string; severity: string; description: string; confidence: string }>;
-  threat_id: string;
-}
 
 interface IngestionRecord {
   id: string;
@@ -37,15 +29,12 @@ interface ParseResult {
 type UploadMode = 'threats' | 'logs';
 
 export default function Ingestion() {
-  const [url, setUrl] = useState('');
-  const [scanning, setScanning] = useState(false);
-  const [scanResult, setScanResult] = useState<ScanResult | null>(null);
   const [importing, setImporting] = useState(false);
   const [importResult, setImportResult] = useState<ParseResult | null>(null);
   const [uploadMode, setUploadMode] = useState<UploadMode>('threats');
   const [history, setHistory] = useState<IngestionRecord[]>([]);
   const [historyLoading, setHistoryLoading] = useState(false);
-  const [activeTab, setActiveTab] = useState<'scan' | 'upload' | 'history'>('upload');
+  const [activeTab, setActiveTab] = useState<'upload' | 'history'>('upload');
 
   const fetchHistory = useCallback(async () => {
     setHistoryLoading(true);
@@ -59,22 +48,6 @@ export default function Ingestion() {
   useEffect(() => {
     fetchHistory();
   }, [fetchHistory]);
-
-  const handleScanUrl = async (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!url) return;
-    setScanning(true);
-    setScanResult(null);
-    try {
-      const formData = new FormData();
-      formData.append('url', url);
-      const res = await api.upload<ScanResult>('/ingestion/scan-url', formData);
-      setScanResult(res);
-      setActiveTab('history');
-      fetchHistory();
-    } catch { /* ignore */ }
-    finally { setScanning(false); }
-  };
 
   const handleFileImport = () => {
     const input = document.createElement('input');
@@ -130,15 +103,9 @@ export default function Ingestion() {
       <div className="page-header">
         <div>
           <h1 className="page-title">Data Ingestion</h1>
-          <p className="page-subtitle">Upload logs, threats, and incidents. Scan URLs for security analysis.</p>
+          <p className="page-subtitle">Upload logs, threats, and incidents for security analysis.</p>
         </div>
         <div style={{ display: 'flex', gap: 8 }}>
-          <button
-            style={tabStyle('scan')}
-            onClick={() => setActiveTab('scan')}
-          >
-            <Globe size={14} /> URL Scan
-          </button>
           <button
             style={tabStyle('upload')}
             onClick={() => setActiveTab('upload')}
@@ -153,90 +120,6 @@ export default function Ingestion() {
           </button>
         </div>
       </div>
-
-      {/* ── URL Scanner Tab ── */}
-      {activeTab === 'scan' && (
-        <div className="card" style={{ maxWidth: 700 }}>
-          <div style={{ display: 'flex', alignItems: 'center', gap: 12, marginBottom: 20 }}>
-            <Globe size={24} style={{ color: 'var(--accent-primary)' }} />
-            <div>
-              <h3 style={{ fontWeight: 600, fontSize: 'var(--font-size-base)' }}>URL Scanner</h3>
-              <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>
-                Scan a URL for threats, malicious indicators, and security risks
-              </p>
-            </div>
-          </div>
-
-          <form onSubmit={handleScanUrl}>
-            <div style={{ display: 'flex', gap: 8, marginBottom: 16 }}>
-              <div style={{ position: 'relative', flex: 1 }}>
-                <LinkIcon size={16} style={{
-                  position: 'absolute', left: 12, top: '50%', transform: 'translateY(-50%)',
-                  color: 'var(--text-tertiary)',
-                }} />
-                <input
-                  type="url"
-                  className="input input-search"
-                  placeholder="https://example.com/suspicious-page"
-                  value={url}
-                  onChange={e => setUrl(e.target.value)}
-                />
-              </div>
-              <button type="submit" className="btn btn-primary" disabled={scanning || !url}>
-                {scanning ? <Loader size={14} className="loading-spinner" /> : <ScanLine size={14} />}
-                Scan
-              </button>
-            </div>
-          </form>
-
-          {scanResult && (
-            <motion.div
-              initial={{ opacity: 0, y: 10 }}
-              animate={{ opacity: 1, y: 0 }}
-              style={{ padding: 16, background: 'var(--bg-secondary)', borderRadius: 'var(--border-radius-sm)' }}
-            >
-              <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 12 }}>
-                <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                  <Shield size={18} style={{ color: scanResult.threat_score > 50 ? 'var(--accent-danger)' : 'var(--accent-success)' }} />
-                  <span style={{ fontWeight: 600, fontSize: 'var(--font-size-sm)' }}>Scan Complete</span>
-                </div>
-                <div className={`badge ${scanResult.threat_score > 50 ? 'badge-critical' : 'badge-low'}`}>
-                  Score: {scanResult.threat_score}
-                </div>
-              </div>
-              <div style={{ fontFamily: 'var(--font-mono)', fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)', marginBottom: 12, wordBreak: 'break-all' }}>
-                {scanResult.url}
-              </div>
-              {scanResult.findings.length > 0 && (
-                <div>
-                  <h4 style={{ fontSize: 'var(--font-size-xs)', fontWeight: 600, marginBottom: 8, color: 'var(--text-secondary)' }}>
-                    Findings ({scanResult.findings.length})
-                  </h4>
-                  {scanResult.findings.map((finding, idx) => (
-                    <div key={idx} style={{
-                      padding: '8px 12px', background: 'var(--bg-card)',
-                      borderRadius: 'var(--border-radius-sm)', marginBottom: 6,
-                      display: 'flex', alignItems: 'flex-start', gap: 8, fontSize: 'var(--font-size-xs)',
-                    }}>
-                      <AlertTriangle size={14} style={{
-                        color: finding.severity === 'high' || finding.severity === 'critical' ? '#ef4444' : '#f59e0b',
-                        flexShrink: 0, marginTop: 1,
-                      }} />
-                      <div>
-                        <div style={{ fontWeight: 600, textTransform: 'capitalize' }}>{finding.type.replace('_', ' ')}</div>
-                        <div style={{ color: 'var(--text-secondary)' }}>{finding.description}</div>
-                        <div style={{ color: 'var(--text-tertiary)', marginTop: 2 }}>
-                          Severity: {finding.severity} · Confidence: {finding.confidence}
-                        </div>
-                      </div>
-                    </div>
-                  ))}
-                </div>
-              )}
-            </motion.div>
-          )}
-        </div>
-      )}
 
       {/* ── File Upload Tab ── */}
       {activeTab === 'upload' && (
@@ -260,7 +143,7 @@ export default function Ingestion() {
                 style={{
                   flex: 1, padding: '10px 16px', borderRadius: 'var(--border-radius-sm)',
                   border: uploadMode === 'threats' ? '1px solid var(--accent-primary)' : '1px solid var(--border-primary)',
-                  cursor: 'pointer', background: uploadMode === 'threats' ? 'rgba(6, 182, 212, 0.08)' : 'var(--bg-secondary)',
+                  cursor: 'pointer', background: uploadMode === 'threats' ? 'rgba(56, 189, 248, 0.08)' : 'var(--bg-secondary)',
                   fontSize: 'var(--font-size-xs)', fontWeight: 600,
                   color: uploadMode === 'threats' ? 'var(--accent-primary)' : 'var(--text-secondary)',
                   transition: 'all 150ms ease', textAlign: 'center' as const,
@@ -274,7 +157,7 @@ export default function Ingestion() {
                 style={{
                   flex: 1, padding: '10px 16px', borderRadius: 'var(--border-radius-sm)',
                   border: uploadMode === 'logs' ? '1px solid var(--accent-primary)' : '1px solid var(--border-primary)',
-                  cursor: 'pointer', background: uploadMode === 'logs' ? 'rgba(6, 182, 212, 0.08)' : 'var(--bg-secondary)',
+                  cursor: 'pointer', background: uploadMode === 'logs' ? 'rgba(56, 189, 248, 0.08)' : 'var(--bg-secondary)',
                   fontSize: 'var(--font-size-xs)', fontWeight: 600,
                   color: uploadMode === 'logs' ? 'var(--accent-primary)' : 'var(--text-secondary)',
                   transition: 'all 150ms ease', textAlign: 'center' as const,
@@ -422,7 +305,7 @@ export default function Ingestion() {
               <div>
                 <h3 style={{ fontWeight: 600, fontSize: 'var(--font-size-base)' }}>My Ingestion History</h3>
                 <p style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>
-                  Your recent scans and file uploads
+                  Your recent file uploads
                 </p>
               </div>
             </div>
@@ -438,7 +321,7 @@ export default function Ingestion() {
           {!historyLoading && history.length === 0 && (
             <div style={{ textAlign: 'center', padding: 48, color: 'var(--text-tertiary)' }}>
               <Upload size={40} style={{ marginBottom: 12, opacity: 0.3 }} />
-              <p>No ingestion history yet. Scan a URL or upload a file to get started.</p>
+              <p>No ingestion history yet. Upload a file to get started.</p>
             </div>
           )}
 
@@ -461,8 +344,8 @@ export default function Ingestion() {
                       <td>
                         <span className="badge" style={{
                           background: record.type === 'url_scan'
-                            ? 'rgba(6, 182, 212, 0.15)' : 'rgba(139, 92, 246, 0.15)',
-                          color: record.type === 'url_scan' ? '#06b6d4' : '#8b5cf6',
+                            ? 'rgba(56, 189, 248, 0.15)' : 'rgba(96, 165, 250, 0.15)',
+                          color: record.type === 'url_scan' ? '#38bdf8' : '#60a5fa',
                           display: 'inline-flex', alignItems: 'center', gap: 4,
                         }}>
                           {record.type === 'url_scan' ? <Globe size={12} /> : <Upload size={12} />}

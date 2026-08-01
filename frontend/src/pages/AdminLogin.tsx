@@ -16,8 +16,8 @@ function AdminBackground() {
 
     let animId: number;
     const orbs = [
-      { x: 0, y: 0, vx: 0.2, vy: 0.15, r: 220, color: 'rgba(168, 85, 247, 0.07)' },
-      { x: 0, y: 0, vx: -0.15, vy: 0.2, r: 260, color: 'rgba(6, 182, 212, 0.05)' },
+      { x: 0, y: 0, vx: 0.2, vy: 0.15, r: 220, color: 'rgba(96, 165, 250, 0.07)' },
+      { x: 0, y: 0, vx: -0.15, vy: 0.2, r: 260, color: 'rgba(56, 189, 248, 0.05)' },
     ];
 
     const resize = () => {
@@ -114,8 +114,8 @@ export default function AdminLogin() {
         position: 'absolute',
         inset: 0,
         backgroundImage: `
-          linear-gradient(rgba(168, 85, 247, 0.03) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(168, 85, 247, 0.03) 1px, transparent 1px)
+          linear-gradient(rgba(96, 165, 250, 0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(96, 165, 250, 0.03) 1px, transparent 1px)
         `,
         backgroundSize: '40px 40px',
         zIndex: 0,
@@ -158,17 +158,17 @@ export default function AdminLogin() {
             <div style={{
               width: 52, height: 52,
               borderRadius: 14,
-              background: 'rgba(168, 85, 247, 0.12)',
+              background: 'rgba(96, 165, 250, 0.12)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
-              boxShadow: '0 0 24px rgba(168, 85, 247, 0.35)',
+              boxShadow: '0 0 24px rgba(96, 165, 250, 0.35)',
             }}>
-              <ShieldCheck size={28} style={{ color: '#a855f7' }} />
+              <ShieldCheck size={28} style={{ color: '#3b82f6' }} />
             </div>
             <div>
               <span style={{ fontSize: 26, fontWeight: 800, color: 'var(--text-primary)' }}>Admin</span>
-              <span style={{ fontSize: 26, fontWeight: 800, color: '#a855f7' }}>Panel</span>
+              <span style={{ fontSize: 26, fontWeight: 800, color: '#3b82f6' }}>Panel</span>
             </div>
           </motion.div>
           <motion.p
@@ -190,11 +190,11 @@ export default function AdminLogin() {
           style={{
             padding: '36px 32px',
             borderRadius: 'var(--border-radius-lg)',
-            border: '1px solid rgba(168, 85, 247, 0.3)',
+            border: '1px solid rgba(96, 165, 250, 0.3)',
           }}
         >
           <h2 style={{ fontSize: 'var(--font-size-xl)', fontWeight: 700, marginBottom: 6, display: 'flex', alignItems: 'center', gap: 8 }}>
-            <KeyRound size={20} style={{ color: '#a855f7' }} />
+            <KeyRound size={20} style={{ color: '#3b82f6' }} />
             Admin Access
           </h2>
           <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-sm)', marginBottom: 28 }}>
@@ -304,10 +304,10 @@ export default function AdminLogin() {
               whileTap={{ scale: loading ? 1 : 0.98 }}
               style={{
                 width: '100%',
-                background: 'linear-gradient(135deg, #a855f7, #7c3aed)',
+                background: 'linear-gradient(135deg, #3b82f6, #2563eb)',
                 border: 'none',
                 color: 'white',
-                boxShadow: '0 4px 20px rgba(168, 85, 247, 0.35)',
+                boxShadow: '0 4px 20px rgba(96, 165, 250, 0.35)',
               }}
             >
               {loading ? (
@@ -327,20 +327,20 @@ export default function AdminLogin() {
             style={{
               marginTop: 20,
               padding: '14px 16px',
-              background: 'rgba(168, 85, 247, 0.06)',
+              background: 'rgba(96, 165, 250, 0.06)',
               borderRadius: 'var(--border-radius-sm)',
               fontSize: 'var(--font-size-xs)',
               color: 'var(--text-tertiary)',
-              border: '1px solid rgba(168, 85, 247, 0.15)',
+              border: '1px solid rgba(96, 165, 250, 0.15)',
             }}
           >
-            <div style={{ fontWeight: 600, marginBottom: 6, color: '#a855f7', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ fontWeight: 600, marginBottom: 6, color: '#3b82f6', display: 'flex', alignItems: 'center', gap: 6 }}>
               <ShieldCheck size={12} />
               Admin Credentials
             </div>
             <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-              <span>Username: <span className="text-mono" style={{ color: '#a855f7' }}>admin2004</span></span>
-              <span>Password: <span className="text-mono" style={{ color: '#a855f7' }}>admin2412</span></span>
+              <span>Username: <span className="text-mono" style={{ color: '#3b82f6' }}>admin2004</span></span>
+              <span>Password: <span className="text-mono" style={{ color: '#3b82f6' }}>admin2412</span></span>
             </div>
           </motion.div>
         </motion.div>

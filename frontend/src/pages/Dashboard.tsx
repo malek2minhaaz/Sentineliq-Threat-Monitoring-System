@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { motion } from 'framer-motion';
 import {
   Activity, AlertTriangle, Shield, TrendingUp, TrendingDown,
@@ -61,7 +61,7 @@ function StatCard({ icon: Icon, label, value, change, color, prefix, subtitle }:
 }
 
 // Chart colors
-const COLORS = ['#06b6d4', '#d946ef', '#f59e0b', '#ef4444', '#10b981', '#3b82f6'];
+const COLORS = ['#38bdf8', '#60a5fa', '#f59e0b', '#ef4444', '#10b981', '#3b82f6'];
 
 interface DashboardData {
   stats: {
@@ -96,9 +96,12 @@ export default function Dashboard() {
     recentActivity: [],
   });
   const [loading, setLoading] = useState(true);
+  const [lastUpdated, setLastUpdated] = useState<Date | null>(null);
+  const [autoRefresh, setAutoRefresh] = useState(true);
 
-  useEffect(() => {
-    const fetchData = async () => {
+  const fetchData = useCallback(async (silent = false) => {
+    if (!silent) setLoading(true);
+    try {
       // Fetch each endpoint independently so one failure doesn't zero out the whole dashboard
       const [stats, vectors, severity, timeline, activity] = await Promise.all([
         api.get<any>('/dashboard/stats').catch(() => null),
@@ -114,10 +117,20 @@ export default function Dashboard() {
         incidentTimeline: timeline,
         recentActivity: activity || [],
       });
+      setLastUpdated(new Date());
+    } finally {
       setLoading(false);
-    };
-    fetchData();
+    }
   }, []);
+
+  useEffect(() => { fetchData(); }, [fetchData]);
+
+  // Auto-refresh every 30s (silent background refresh)
+  useEffect(() => {
+    if (!autoRefresh) return;
+    const t = setInterval(() => fetchData(true), 30000);
+    return () => clearInterval(t);
+  }, [autoRefresh, fetchData]);
 
   if (loading) {
     return (
@@ -155,9 +168,31 @@ export default function Dashboard() {
             <Shield size={14} style={{ marginRight: 6 }} />
             Security Score: {stats?.security_score ?? 0}/100
           </div>
-          <button className="btn btn-sm btn-secondary" onClick={() => window.location.reload()}>
-            <RefreshCw size={14} /> Refresh
-          </button>
+          <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+              <button
+                onClick={() => setAutoRefresh(v => !v)}
+                title={autoRefresh ? 'Auto-refresh on' : 'Auto-refresh off'}
+                style={{
+                  width: 30, height: 30, borderRadius: 8,
+                  border: 'none', cursor: 'pointer',
+                  background: autoRefresh ? 'rgba(16,185,129,0.12)' : 'var(--bg-tertiary)',
+                  color: autoRefresh ? '#10b981' : 'var(--text-tertiary)',
+                  display: 'flex', alignItems: 'center', justifyContent: 'center',
+                }}
+              >
+                <RefreshCw size={13} className={autoRefresh ? 'spin-slow' : ''} />
+              </button>
+              {lastUpdated && (
+                <span style={{ fontSize: 10, color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)' }}>
+                  Updated {lastUpdated.toLocaleTimeString()}
+                </span>
+              )}
+            </div>
+            <button className="btn btn-sm btn-secondary" onClick={() => fetchData()}>
+              <RefreshCw size={14} /> Refresh
+            </button>
+          </div>
         </div>
       </div>
 
@@ -173,17 +208,17 @@ export default function Dashboard() {
         }}
       >
         <StatCard icon={Target} label="Websites Monitored" value={stats?.monitored_websites ?? 0}
-          color="#06b6d4" subtitle="Websites under active monitoring" />
+          color="#38bdf8" subtitle="Websites under active monitoring" />
         <StatCard icon={Eye} label="Security Events Today" value={stats?.monitor_events_today ?? 0}
           color="#f97316" subtitle="Real-time attack events detected" />
         <StatCard icon={AlertTriangle} label="Critical Incidents" value={stats?.critical_incidents ?? 0}
           color="#ef4444" subtitle="Requires immediate attention" />
         <StatCard icon={Shield} label="Active IOCs" value={stats?.total_iocs ?? 0}
-          color="#d946ef" subtitle="Threat intelligence indicators" />
+          color="#3b82f6" subtitle="Threat intelligence indicators" />
         <StatCard icon={Radio} label="URL Scans" value={stats?.my_scans ?? 0}
           color="#10b981" subtitle="Websites & URLs scanned" />
         <StatCard icon={Upload} label="File Uploads" value={stats?.my_uploads ?? 0}
-          color="#8b5cf6" subtitle="Data ingestion completed" />
+          color="#60a5fa" subtitle="Data ingestion completed" />
       </motion.div>
 
       {/* My Activity Section */}
@@ -218,7 +253,7 @@ export default function Dashboard() {
               borderRadius: 'var(--border-radius-sm)',
             }}
           >
-            <Target size={24} style={{ color: '#06b6d4', marginBottom: 8 }} />
+            <Target size={24} style={{ color: '#38bdf8', marginBottom: 8 }} />
             <div className="stat-card-value" style={{ fontSize: 'var(--font-size-2xl)' }}>{stats?.monitored_websites ?? 0}</div>
             <div className="stat-card-label">Monitored Sites</div>
           </motion.div>
@@ -257,7 +292,7 @@ export default function Dashboard() {
               borderRadius: 'var(--border-radius-sm)',
             }}
           >
-            <Upload size={24} style={{ color: '#8b5cf6', marginBottom: 8 }} />
+            <Upload size={24} style={{ color: '#60a5fa', marginBottom: 8 }} />
             <div className="stat-card-value" style={{ fontSize: 'var(--font-size-2xl)' }}>{stats?.my_uploads ?? 0}</div>
             <div className="stat-card-label">File Uploads</div>
           </motion.div>
@@ -313,7 +348,7 @@ export default function Dashboard() {
                     boxShadow: 'var(--shadow-md)',
                   }}
                 />
-                <Bar dataKey="value" fill="#06b6d4" radius={[6, 6, 0, 0]} barSize={32} />
+                <Bar dataKey="value" fill="#38bdf8" radius={[6, 6, 0, 0]} barSize={32} />
               </BarChart>
             </ResponsiveContainer>
           </div>
@@ -412,8 +447,8 @@ export default function Dashboard() {
               <AreaChart data={incidentTimeline.length > 0 ? incidentTimeline : [{ date: 'No Data', count: 0 }]}>
                 <defs>
                   <linearGradient id="colorCount" x1="0" y1="0" x2="0" y2="1">
-                    <stop offset="5%" stopColor="#06b6d4" stopOpacity={0.3} />
-                    <stop offset="95%" stopColor="#06b6d4" stopOpacity={0} />
+                    <stop offset="5%" stopColor="#38bdf8" stopOpacity={0.3} />
+                    <stop offset="95%" stopColor="#38bdf8" stopOpacity={0} />
                   </linearGradient>
                 </defs>
                 <CartesianGrid strokeDasharray="3 3" stroke="rgba(148,163,184,0.08)" />
@@ -427,7 +462,7 @@ export default function Dashboard() {
                     color: 'var(--text-primary)',
                   }}
                 />
-                <Area type="monotone" dataKey="count" stroke="#06b6d4" fillOpacity={1} fill="url(#colorCount)" strokeWidth={2} />
+                <Area type="monotone" dataKey="count" stroke="#38bdf8" fillOpacity={1} fill="url(#colorCount)" strokeWidth={2} />
               </AreaChart>
             </ResponsiveContainer>
           </div>

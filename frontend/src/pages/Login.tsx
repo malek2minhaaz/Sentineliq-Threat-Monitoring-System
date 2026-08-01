@@ -25,9 +25,9 @@ function AnimatedBackground() {
     window.addEventListener('resize', resize);
 
     // Create gradient orbs
-    orbs.push({ x: canvas.width * 0.2, y: canvas.height * 0.3, vx: 0.3, vy: 0.2, r: 200, color: 'rgba(6, 182, 212, 0.06)' });
-    orbs.push({ x: canvas.width * 0.8, y: canvas.height * 0.6, vx: -0.2, vy: 0.3, r: 250, color: 'rgba(217, 70, 239, 0.04)' });
-    orbs.push({ x: canvas.width * 0.5, y: canvas.height * 0.8, vx: 0.1, vy: -0.25, r: 180, color: 'rgba(6, 182, 212, 0.04)' });
+    orbs.push({ x: canvas.width * 0.2, y: canvas.height * 0.3, vx: 0.3, vy: 0.2, r: 200, color: 'rgba(56, 189, 248, 0.06)' });
+    orbs.push({ x: canvas.width * 0.8, y: canvas.height * 0.6, vx: -0.2, vy: 0.3, r: 250, color: 'rgba(96, 165, 250, 0.04)' });
+    orbs.push({ x: canvas.width * 0.5, y: canvas.height * 0.8, vx: 0.1, vy: -0.25, r: 180, color: 'rgba(56, 189, 248, 0.04)' });
 
     const animate = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -73,7 +73,7 @@ export default function Login() {
   const navigate = useNavigate();
 
   useEffect(() => {
-    if (user) navigate('/dashboard', { replace: true });
+    if (user) navigate(user.role === 'admin' ? '/admin' : '/dashboard', { replace: true });
   }, [user, navigate]);
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -85,8 +85,8 @@ export default function Login() {
     }
     setLoading(true);
     try {
-      await login(username, password);
-      navigate('/dashboard', { replace: true });
+      const loggedIn = await login(username, password);
+      navigate(loggedIn.role === 'admin' ? '/admin' : '/dashboard', { replace: true });
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Invalid credentials');
     } finally {
@@ -112,8 +112,8 @@ export default function Login() {
         position: 'absolute',
         inset: 0,
         backgroundImage: `
-          linear-gradient(rgba(6, 182, 212, 0.03) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(6, 182, 212, 0.03) 1px, transparent 1px)
+          linear-gradient(rgba(56, 189, 248, 0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(56, 189, 248, 0.03) 1px, transparent 1px)
         `,
         backgroundSize: '40px 40px',
         zIndex: 0,
@@ -144,7 +144,7 @@ export default function Login() {
             <div style={{
               width: 52, height: 52,
               borderRadius: 14,
-              background: 'rgba(6, 182, 212, 0.1)',
+              background: 'rgba(56, 189, 248, 0.1)',
               display: 'flex',
               alignItems: 'center',
               justifyContent: 'center',
@@ -333,13 +333,23 @@ export default function Login() {
               border: 'var(--border-primary)',
             }}
           >
-            <div style={{ fontWeight: 600, marginBottom: 6, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
+            <div style={{ fontWeight: 600, marginBottom: 8, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
               <Shield size={12} color="var(--accent-primary)" />
               Demo Credentials
             </div>
-            <div style={{ display: 'flex', gap: 16, flexWrap: 'wrap' }}>
-              <span>Username: <span className="text-mono" style={{ color: 'var(--accent-primary)' }}>admin</span></span>
-              <span>Password: <span className="text-mono" style={{ color: 'var(--accent-primary)' }}>admin123</span></span>
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span className="badge" style={{ background: 'rgba(56,189,248,0.12)', color: '#7dd3fc' }}>User</span>
+                <span>Username: <span className="text-mono" style={{ color: 'var(--accent-primary)' }}>demo</span></span>
+                <span>Password: <span className="text-mono" style={{ color: 'var(--accent-primary)' }}>demo123</span></span>
+                <span style={{ color: 'var(--text-secondary)' }}>→ Dashboard</span>
+              </span>
+              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+                <span className="badge" style={{ background: 'rgba(96,165,250,0.12)', color: '#7dd3fc' }}>Admin</span>
+                <span>Username: <span className="text-mono" style={{ color: 'var(--accent-primary)' }}>admin2004</span></span>
+                <span>Password: <span className="text-mono" style={{ color: 'var(--accent-primary)' }}>admin2412</span></span>
+                <span style={{ color: 'var(--text-secondary)' }}>→ Admin Panel</span>
+              </span>
             </div>
           </motion.div>
         </motion.div>

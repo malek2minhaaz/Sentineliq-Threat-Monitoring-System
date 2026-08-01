@@ -24,9 +24,9 @@ function AnimatedBackground() {
     resize();
     window.addEventListener('resize', resize);
 
-    orbs.push({ x: canvas.width * 0.3, y: canvas.height * 0.2, vx: -0.3, vy: 0.15, r: 220, color: 'rgba(217, 70, 239, 0.05)' });
-    orbs.push({ x: canvas.width * 0.7, y: canvas.height * 0.5, vx: 0.25, vy: -0.2, r: 280, color: 'rgba(6, 182, 212, 0.05)' });
-    orbs.push({ x: canvas.width * 0.4, y: canvas.height * 0.8, vx: -0.15, vy: -0.15, r: 190, color: 'rgba(217, 70, 239, 0.03)' });
+    orbs.push({ x: canvas.width * 0.3, y: canvas.height * 0.2, vx: -0.3, vy: 0.15, r: 220, color: 'rgba(96, 165, 250, 0.05)' });
+    orbs.push({ x: canvas.width * 0.7, y: canvas.height * 0.5, vx: 0.25, vy: -0.2, r: 280, color: 'rgba(56, 189, 248, 0.05)' });
+    orbs.push({ x: canvas.width * 0.4, y: canvas.height * 0.8, vx: -0.15, vy: -0.15, r: 190, color: 'rgba(96, 165, 250, 0.03)' });
 
     const animate = () => {
       ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -118,8 +118,8 @@ export default function Register() {
         position: 'absolute',
         inset: 0,
         backgroundImage: `
-          linear-gradient(rgba(6, 182, 212, 0.03) 1px, transparent 1px),
-          linear-gradient(90deg, rgba(6, 182, 212, 0.03) 1px, transparent 1px)
+          linear-gradient(rgba(56, 189, 248, 0.03) 1px, transparent 1px),
+          linear-gradient(90deg, rgba(56, 189, 248, 0.03) 1px, transparent 1px)
         `,
         backgroundSize: '40px 40px',
         zIndex: 0,
@@ -143,7 +143,7 @@ export default function Register() {
           >
             <div style={{
               width: 52, height: 52, borderRadius: 14,
-              background: 'rgba(6, 182, 212, 0.1)',
+              background: 'rgba(56, 189, 248, 0.1)',
               display: 'flex', alignItems: 'center', justifyContent: 'center',
               boxShadow: 'var(--glow-cyan)',
             }}>

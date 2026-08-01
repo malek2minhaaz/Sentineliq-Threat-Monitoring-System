@@ -37,6 +37,7 @@ class User(Base):
     avatar = Column(String, default="")
     created_at = Column(DateTime, default=utcnow)
     is_verified = Column(Boolean, default=False)
+    is_active = Column(Boolean, default=True)  # False = suspended by admin
     theme = Column(String, default="dark")
 
     def to_dict(self):
@@ -48,6 +49,7 @@ class User(Base):
             "avatar": self.avatar,
             "created_at": self.created_at.isoformat(),
             "is_verified": self.is_verified,
+            "is_active": self.is_active,
             "theme": self.theme,
         }
 
@@ -170,6 +172,11 @@ class Endpoint(Base):
     running_processes = Column(Integer, default=0)
     alerts_count = Column(Integer, default=0)
     tags = Column(Text, default="")
+    # ── EDR Response fields ──────────────────────────────────────────────
+    isolated = Column(Boolean, default=False)
+    isolation_reason = Column(String, default="")
+    isolation_started_at = Column(DateTime, nullable=True)
+    action_history = Column(Text, default="[]")  # JSON array of {action, detail, timestamp}
 
     def to_dict(self):
         return {
@@ -187,6 +194,10 @@ class Endpoint(Base):
             "running_processes": self.running_processes,
             "alerts_count": self.alerts_count,
             "tags": self.tags.split(",") if self.tags else [],
+            "isolated": self.isolated,
+            "isolation_reason": self.isolation_reason,
+            "isolation_started_at": self.isolation_started_at.isoformat() if self.isolation_started_at else None,
+            "action_history": json.loads(self.action_history) if self.action_history else [],
         }
 
 
@@ -382,5 +393,39 @@ class WebsiteMonitor(Base):
 
 # ─── Create all ─────────────────────────────────────────────────────────────
 
+def _ensure_endpoint_columns(db):
+    """Idempotently add EDR-response columns to the endpoints table.
+    SQLite's create_all() won't alter an existing table, so we ALTER TABLE
+    for any missing column (added in the EDR Response feature)."""
+    from sqlalchemy import text as _text
+    existing = {row["name"] for row in db.execute(_text("PRAGMA table_info(endpoints)")).mappings()}
+    adds = [
+        ("isolated", "BOOLEAN DEFAULT 0"),
+        ("isolation_reason", "VARCHAR DEFAULT ''"),
+        ("isolation_started_at", "DATETIME"),
+        ("action_history", "TEXT DEFAULT '[]'"),
+    ]
+    for col, ddl in adds:
+        if col not in existing:
+            db.execute(_text(f"ALTER TABLE endpoints ADD COLUMN {col} {ddl}"))
+    db.commit()
+
+
+def _ensure_user_columns(db):
+    """Idempotently add admin-management columns to the users table
+    (is_active added in the Admin Management feature)."""
+    from sqlalchemy import text as _text
+    existing = {row["name"] for row in db.execute(_text("PRAGMA table_info(users)")).mappings()}
+    if "is_active" not in existing:
+        db.execute(_text("ALTER TABLE users ADD COLUMN is_active BOOLEAN DEFAULT 1"))
+        db.commit()
+
+
 def init_db():
     Base.metadata.create_all(bind=engine)
+    db = SessionLocal()
+    try:
+        _ensure_endpoint_columns(db)
+        _ensure_user_columns(db)
+    finally:
+        db.close()

@@ -104,16 +104,16 @@ export default function Settings() {
               borderRadius: 'var(--border-radius-md)',
               border: theme === 'dark' ? '2px solid var(--accent-primary)' : 'var(--border-primary)',
               cursor: 'pointer',
-              background: '#0a0e1a',
+              background: '#04060c',
               boxShadow: theme === 'dark' ? 'var(--glow-cyan)' : 'none',
               transition: 'all var(--transition-fast)',
             }}
           >
-            <Moon size={24} style={{ color: '#06b6d4', marginBottom: 12 }} />
+            <Moon size={24} style={{ color: '#38bdf8', marginBottom: 12 }} />
             <div style={{ color: '#e2e8f0', fontWeight: 600, marginBottom: 4 }}>Cyberpunk SOC</div>
             <div style={{ color: '#64748b', fontSize: 'var(--font-size-xs)' }}>Dark theme with neon accents</div>
             {theme === 'dark' && (
-              <div style={{ marginTop: 8, fontSize: 'var(--font-size-xs)', color: '#06b6d4', fontWeight: 600 }}>✓ Active</div>
+              <div style={{ marginTop: 8, fontSize: 'var(--font-size-xs)', color: '#38bdf8', fontWeight: 600 }}>✓ Active</div>
             )}
           </motion.div>
 
@@ -132,11 +132,11 @@ export default function Settings() {
               transition: 'all var(--transition-fast)',
             }}
           >
-            <Sun size={24} style={{ color: '#0891b2', marginBottom: 12 }} />
+            <Sun size={24} style={{ color: '#2563eb', marginBottom: 12 }} />
             <div style={{ color: '#0f172a', fontWeight: 600, marginBottom: 4 }}>Clean Light</div>
             <div style={{ color: '#64748b', fontSize: 'var(--font-size-xs)' }}>Minimal light theme</div>
             {theme === 'light' && (
-              <div style={{ marginTop: 8, fontSize: 'var(--font-size-xs)', color: '#0891b2', fontWeight: 600 }}>✓ Active</div>
+              <div style={{ marginTop: 8, fontSize: 'var(--font-size-xs)', color: '#2563eb', fontWeight: 600 }}>✓ Active</div>
             )}
           </motion.div>
         </div>

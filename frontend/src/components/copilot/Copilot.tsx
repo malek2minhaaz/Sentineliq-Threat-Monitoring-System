@@ -41,9 +41,12 @@ export default function Copilot() {
     setLoading(true);
 
     try {
+      // Send the last few turns so the Copilot can resolve follow-up questions
+      const history = messages.slice(-6).map(m => ({ role: m.role, content: m.content }));
       const res = await api.post<{ response: string }>('/copilot/chat', {
         message: userMsg.content,
         context: window.location.pathname,
+        history,
       });
       setMessages(prev => [...prev, {
         role: 'assistant',
@@ -91,7 +94,7 @@ export default function Copilot() {
           display: 'flex',
           alignItems: 'center',
           justifyContent: 'center',
-          boxShadow: '0 4px 20px rgba(6, 182, 212, 0.4)',
+          boxShadow: '0 4px 20px rgba(56, 189, 248, 0.4)',
           zIndex: 100,
         }}
       >

@@ -1,4 +1,4 @@
-import { useState, useRef, useEffect } from 'react';
+import { useState, useRef, useEffect, memo } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import {
   Bell, Search, Menu, Sun, Moon,
@@ -7,6 +7,31 @@ import {
 import { useNotifications } from '../../contexts/NotificationContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
+
+// Isolated live clock — only this tiny component re-renders each second,
+// not the whole header (which includes the notifications dropdown).
+const LiveClock = memo(function LiveClock() {
+  const [now, setNow] = useState(new Date());
+  useEffect(() => {
+    const t = setInterval(() => setNow(new Date()), 1000);
+    return () => clearInterval(t);
+  }, []);
+  return (
+    <div className="live-clock" style={{
+      display: 'flex', alignItems: 'center', gap: 6,
+      padding: '6px 12px',
+      borderRadius: 'var(--border-radius-sm)',
+      background: 'var(--bg-tertiary)',
+      border: 'var(--border-primary)',
+      marginRight: 4,
+    }}>
+      <span className="pulse-dot" style={{ width: 6, height: 6, borderRadius: '50%', background: 'var(--accent-success)' }} />
+      <span style={{ fontFamily: 'var(--font-mono)', fontSize: 11, color: 'var(--text-secondary)' }}>
+        {now.toLocaleTimeString('en-GB')}
+      </span>
+    </div>
+  );
+});
 
 interface HeaderProps {
   onMenuClick: () => void;
@@ -116,6 +141,9 @@ export default function Header({ onMenuClick, onCommandPalette }: HeaderProps) {
 
       {/* Right */}
       <div style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
+        {/* Live clock (isolated memo component) */}
+        <LiveClock />
+
         {/* Theme toggle */}
         <motion.button
           whileHover={{ scale: 1.05 }}
@@ -241,7 +269,7 @@ export default function Header({ onMenuClick, onCommandPalette }: HeaderProps) {
                           padding: '12px 16px',
                           borderBottom: 'var(--border-primary)',
                           cursor: 'pointer',
-                          background: notif.is_read ? 'transparent' : 'rgba(6, 182, 212, 0.04)',
+                          background: notif.is_read ? 'transparent' : 'rgba(56, 189, 248, 0.04)',
                           display: 'flex',
                           gap: 10,
                           alignItems: 'flex-start',
@@ -249,12 +277,12 @@ export default function Header({ onMenuClick, onCommandPalette }: HeaderProps) {
                         }}
                         onMouseEnter={e => { (e.currentTarget as HTMLElement).style.background = 'var(--bg-card-hover)'; }}
                         onMouseLeave={e => {
-                          (e.currentTarget as HTMLElement).style.background = notif.is_read ? 'transparent' : 'rgba(6, 182, 212, 0.04)';
+                          (e.currentTarget as HTMLElement).style.background = notif.is_read ? 'transparent' : 'rgba(56, 189, 248, 0.04)';
                         }}
                       >
                         <div style={{
                           width: 28, height: 28, borderRadius: 8,
-                          background: notif.severity === 'critical' ? 'rgba(239,68,68,0.1)' : 'rgba(6,182,212,0.1)',
+                          background: notif.severity === 'critical' ? 'rgba(239,68,68,0.1)' : 'rgba(56,189,248,0.1)',
                           display: 'flex', alignItems: 'center', justifyContent: 'center', flexShrink: 0,
                         }}>
                           {severityIcon(notif.severity)}
@@ -289,7 +317,7 @@ export default function Header({ onMenuClick, onCommandPalette }: HeaderProps) {
                               background: 'var(--accent-primary)',
                               flexShrink: 0,
                               marginTop: 6,
-                              boxShadow: '0 0 4px rgba(6, 182, 212, 0.5)',
+                              boxShadow: '0 0 4px rgba(56, 189, 248, 0.5)',
                             }}
                           />
                         )}
@@ -353,6 +381,9 @@ export default function Header({ onMenuClick, onCommandPalette }: HeaderProps) {
         @media (max-width: 768px) {
           .mobile-menu-btn { display: flex !important; }
           .logout-label { display: none !important; }
+        }
+        @media (max-width: 1100px) {
+          .live-clock { display: none !important; }
         }
       `}</style>
     </header>

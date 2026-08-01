@@ -29,9 +29,9 @@ interface TrafficPoint {
 const categoryColors: Record<string, string> = {
   'sql-injection': '#ef4444',
   'xss': '#f97316',
-  'path-traversal': '#8b5cf6',
+  'path-traversal': '#60a5fa',
   'rate-limit': '#f59e0b',
-  'command-injection': '#06b6d4',
+  'command-injection': '#38bdf8',
   'ip-reputation': '#3b82f6',
 };
 
@@ -152,7 +152,7 @@ export default function WAF() {
           </h3>
           <div style={{ display: 'flex', gap: 16, fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)' }}>
             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
-              <span style={{ width: 8, height: 3, borderRadius: 1, background: '#06b6d4', display: 'inline-block' }} />
+              <span style={{ width: 8, height: 3, borderRadius: 1, background: '#38bdf8', display: 'inline-block' }} />
               Requests
             </span>
             <span style={{ display: 'flex', alignItems: 'center', gap: 4 }}>
@@ -180,7 +180,7 @@ export default function WAF() {
                   boxShadow: 'var(--shadow-md)',
                 }}
               />
-              <Line type="monotone" dataKey="requests" stroke="#06b6d4" strokeWidth={2} name="Requests" dot={false} />
+              <Line type="monotone" dataKey="requests" stroke="#38bdf8" strokeWidth={2} name="Requests" dot={false} />
               <Line type="monotone" dataKey="blocked" stroke="#ef4444" strokeWidth={2} name="Blocked" dot={false} />
               <Line type="monotone" dataKey="anomalies" stroke="#f59e0b" strokeWidth={2} name="Anomalies" dot={false} />
             </LineChart>
