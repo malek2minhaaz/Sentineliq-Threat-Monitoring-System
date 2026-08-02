@@ -318,40 +318,6 @@ export default function Login() {
             </Link>
           </div>
 
-          {/* Demo credentials */}
-          <motion.div
-            initial={{ opacity: 0 }}
-            animate={{ opacity: 1 }}
-            transition={{ delay: 0.5 }}
-            style={{
-              marginTop: 20,
-              padding: '14px 16px',
-              background: 'var(--bg-secondary)',
-              borderRadius: 'var(--border-radius-sm)',
-              fontSize: 'var(--font-size-xs)',
-              color: 'var(--text-tertiary)',
-              border: 'var(--border-primary)',
-            }}
-          >
-            <div style={{ fontWeight: 600, marginBottom: 8, color: 'var(--text-secondary)', display: 'flex', alignItems: 'center', gap: 6 }}>
-              <Shield size={12} color="var(--accent-primary)" />
-              Demo Credentials
-            </div>
-            <div style={{ display: 'flex', flexDirection: 'column', gap: 6 }}>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span className="badge" style={{ background: 'rgba(56,189,248,0.12)', color: '#7dd3fc' }}>User</span>
-                <span>Username: <span className="text-mono" style={{ color: 'var(--accent-primary)' }}>demo</span></span>
-                <span>Password: <span className="text-mono" style={{ color: 'var(--accent-primary)' }}>demo123</span></span>
-                <span style={{ color: 'var(--text-secondary)' }}>→ Dashboard</span>
-              </span>
-              <span style={{ display: 'flex', alignItems: 'center', gap: 6 }}>
-                <span className="badge" style={{ background: 'rgba(96,165,250,0.12)', color: '#7dd3fc' }}>Admin</span>
-                <span>Username: <span className="text-mono" style={{ color: 'var(--accent-primary)' }}>admin2004</span></span>
-                <span>Password: <span className="text-mono" style={{ color: 'var(--accent-primary)' }}>admin2412</span></span>
-                <span style={{ color: 'var(--text-secondary)' }}>→ Admin Panel</span>
-              </span>
-            </div>
-          </motion.div>
         </motion.div>
       </motion.div>
     </div>
