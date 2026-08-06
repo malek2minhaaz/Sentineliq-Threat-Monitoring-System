@@ -17,11 +17,15 @@ import sys
 import json
 import time
 import random
+import os
 import requests
 import argparse
 
 
-API_BASE = "http://localhost:8000/api"
+# Backend API base. Override with the SENTINALIQ_API env var so the attacker can
+# point the script at the friend's backend when they are on different machines,
+# e.g.  SENTINALIQ_API=http://192.168.1.50:8000/api
+API_BASE = os.environ.get("SENTINALIQ_API", "http://localhost:8000/api")
 TOKEN = None
 TARGET_URL = None  # Set via --target argument to target a monitored website
 USERNAME = "admin"
@@ -64,6 +68,15 @@ def headers():
     return {"Authorization": f"Bearer {TOKEN}", "Content-Type": "application/json"}
 
 
+def _warn_if_unmonitored(data: dict):
+    """Explain why nothing will appear in a dashboard when the targeted URL is
+    not being monitored by any user on this backend."""
+    if TARGET_URL and not data.get("websites"):
+        print("    ⚠️  No user is currently monitoring this URL — no incident was created.")
+        print("        The friend must add it first: Live Monitor → 'Start Monitoring'")
+        print("        on the SAME backend, then re-run the attack with the exact same URL.")
+
+
 # ─── Attack Scripts ──────────────────────────────────────────────────────────
 
 def _attack_payload(attack_type: str, severity: str, extra: dict = None):
@@ -83,6 +96,7 @@ def _attack_payload(attack_type: str, severity: str, extra: dict = None):
         data = res.json()
         print(f"    Status:  {data.get('status', 'blocked').upper()}")
         print(f"    Source:  {data.get('source_ip')} ({data.get('source_country')})")
+        _warn_if_unmonitored(data)
         # Handle new format: incidents[] and websites[] arrays
         if data.get('incidents'):
             for inc in data['incidents']:
@@ -158,6 +172,7 @@ def ddos_attack():
         data = res.json()
         print(f"    Simulated: {data.get('simulated', 0)} events")
         print(f"    Message:  {data.get('message', '')}")
+        _warn_if_unmonitored(data)
     else:
         print(f"    [✗] Failed: {res.text}")
     return res.ok
@@ -191,6 +206,7 @@ def attack_wave(count=10):
     if res.ok:
         data = res.json()
         print(f"    Simulated: {data.get('simulated', 0)} events")
+        _warn_if_unmonitored(data)
         events = data.get('events', [])
         for e in events[:5]:
             print(f"    • [{e.get('severity','?').upper()}] {e.get('event_type','?')} → {e.get('status','?')}")
@@ -349,6 +365,8 @@ Examples:
     TARGET_URL = args.target
     if TARGET_URL:
         print(f"[🎯] Targeting monitored website: {TARGET_URL}")
+    else:
+        print("[💡] Tip: use --target <url> to attack a website your friend is monitoring")
     
     # Run the selected attack
     if args.continuous:

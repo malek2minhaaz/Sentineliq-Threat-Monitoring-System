@@ -1233,7 +1233,7 @@ async def simulate_attack(
     attack_type = data.get("type", random.choice(["injection", "xss", "brute_force", "scan", "ddos", "malware"]))
     severity = data.get("severity", random.choice(["low", "medium", "high", "critical"]))
     source_ip = data.get("source_ip", f"{random.randint(1,223)}.{random.randint(0,255)}.{random.randint(0,255)}.{random.randint(1,254)}")
-    target_url = data.get("target_url", "")
+    target_url = data.get("target_url") or ""
     
     # If target_url is provided, find ALL users monitoring this website by hostname
     # The incident is tagged to the WEBSITE OWNER, not the person running the attack
@@ -1305,27 +1305,31 @@ async def simulate_attack(
     countries = ["Russia", "China", "North Korea", "Iran", "Ukraine", "United States", "Germany", "Netherlands", "Brazil", "Nigeria", "Vietnam", "India"]
     status_options = ["blocked", "blocked", "blocked", "detected", "investigating"]
     
-    # Determine the target user_id: use the website owner's ID if target is monitored,
-    # otherwise use the authenticated user's ID
-    target_user_id = monitored_websites[0].user_id if monitored_websites else payload["sub"]
+    # Route the attack to the WEBSITE OWNERS (every user monitoring this hostname),
+    # not the person running the attack. Each owner gets their own MonitorEvent so
+    # they all see it in their own security-events stream.
+    owner_ids = list(dict.fromkeys(mw.user_id for mw in monitored_websites)) if monitored_websites else [payload["sub"]]
     
-    event = MonitorEvent(
-        id=generate_uuid(),
-        user_id=target_user_id,
-        event_type=attack_type,
-        severity=severity,
-        source_ip=source_ip,
-        source_country=random.choice(countries),
-        target=target_label,
-        method=template["method"],
-        path=template["path"],
-        user_agent=f"Mozilla/5.0 (compatible; {random.choice(['AttackBot/1.0', 'Malice/2.1', 'HackerTool/3.0', 'Nikto/2.5', 'SQLMap/1.8'])})",
-        payload=template["payload"],
-        message=template["message"],
-        status=data.get("status", random.choice(status_options)),
-        is_active=True,
-    )
-    db.add(event)
+    events = []
+    for owner_id in owner_ids:
+        event = MonitorEvent(
+            id=generate_uuid(),
+            user_id=owner_id,
+            event_type=attack_type,
+            severity=severity,
+            source_ip=source_ip,
+            source_country=random.choice(countries),
+            target=target_label,
+            method=template["method"],
+            path=template["path"],
+            user_agent=f"Mozilla/5.0 (compatible; {random.choice(['AttackBot/1.0', 'Malice/2.1', 'HackerTool/3.0', 'Nikto/2.5', 'SQLMap/1.8'])})",
+            payload=template["payload"],
+            message=template["message"],
+            status=data.get("status", random.choice(status_options)),
+            is_active=True,
+        )
+        db.add(event)
+        events.append(event)
     db.commit()
     
     # Also create a log event
@@ -1373,13 +1377,14 @@ async def simulate_attack(
     if monitored_websites:
         db.commit()
     
-    # Broadcast via WebSocket
-    await broadcast_alert({
-        "type": "new_attack",
-        "data": event.to_dict()
-    })
+    # Broadcast each owner's event via WebSocket
+    for event in events:
+        await broadcast_alert({
+            "type": "new_attack",
+            "data": event.to_dict()
+        })
     
-    result = event.to_dict()
+    result = events[0].to_dict()
     if incidents:
         result["incidents"] = [i.to_dict() for i in incidents]
     if monitored_websites:
@@ -1397,6 +1402,22 @@ async def simulate_attack_wave(
     count = min(data.get("count", 10), 100)
     attack_types = ["injection", "xss", "brute_force", "scan", "ddos", "malware", "path_traversal", "csrf"]
     severities = ["low", "medium", "high", "critical"]
+    
+    # If target_url is provided, route the wave to the WEBSITE OWNERS (every user
+    # monitoring this hostname) so they all see events + incidents — same behavior
+    # as simulate-attack. Otherwise events stay with the authenticated user.
+    target_url = data.get("target_url") or ""
+    monitored_websites = []
+    if target_url:
+        parsed_target = urlparse(target_url if '://' in target_url else 'https://' + target_url)
+        target_hostname = parsed_target.hostname or target_url
+        print(f"[DEBUG] Looking up monitored websites by hostname: '{target_hostname}'...")
+        monitored_websites = db.query(WebsiteMonitor).filter(
+            WebsiteMonitor.hostname == target_hostname
+        ).all()
+        print(f"[DEBUG] Found: {len(monitored_websites)} site(s) monitoring this URL")
+    owner_ids = list(dict.fromkeys(mw.user_id for mw in monitored_websites)) if monitored_websites else [payload["sub"]]
+    target_label = monitored_websites[0].hostname if monitored_websites else None
     
     created = []
     for _ in range(count):
@@ -1420,24 +1441,64 @@ async def simulate_attack_wave(
         tmpl = attack_templates.get(attack_type, attack_templates["scan"])
         status_options = ["blocked", "blocked", "blocked", "detected", "investigating"]
         
-        event = MonitorEvent(
-            id=generate_uuid(),
-            user_id=payload["sub"],
-            event_type=attack_type,
-            severity=severity,
-            source_ip=source_ip,
-            source_country=random.choice(countries),
-            target=tmpl["target"],
-            method=tmpl["method"],
-            path=tmpl["path"],
-            user_agent=f"AttackBot/{random.randint(1,5)}.{random.randint(0,9)}",
-            payload=tmpl["payload"],
-            message=tmpl["message"],
-            status=random.choice(status_options),
-            is_active=True,
-        )
-        db.add(event)
-        created.append(event)
+        # One event per owner so every owner sees the wave in their own stream
+        for owner_id in owner_ids:
+            event = MonitorEvent(
+                id=generate_uuid(),
+                user_id=owner_id,
+                event_type=attack_type,
+                severity=severity,
+                source_ip=source_ip,
+                source_country=random.choice(countries),
+                target=target_label or tmpl["target"],
+                method=tmpl["method"],
+                path=tmpl["path"],
+                user_agent=f"AttackBot/{random.randint(1,5)}.{random.randint(0,9)}",
+                payload=tmpl["payload"],
+                message=tmpl["message"],
+                status=random.choice(status_options),
+                is_active=True,
+            )
+            db.add(event)
+            created.append(event)
+    
+    # If targeting monitored websites, create incidents & update threat scores for ALL owners
+    incidents = []
+    for mw in monitored_websites:
+        wave_for_owner = [e for e in created if e.user_id == mw.user_id]
+        # Summarize the worst severity seen in the wave for this owner
+        worst = "low"
+        if any(e.severity == "critical" for e in wave_for_owner):
+            worst = "critical"
+        elif any(e.severity == "high" for e in wave_for_owner):
+            worst = "high"
+        elif any(e.severity == "medium" for e in wave_for_owner):
+            worst = "medium"
+        
+        if worst in ["high", "critical"]:
+            inc = Incident(
+                id=generate_uuid(),
+                user_id=mw.user_id,
+                title=f"{worst.title()} Attack Wave on {mw.hostname}",
+                description=f"An attack wave with {worst} severity events was detected targeting {target_url}.",
+                severity=worst,
+                status="open",
+                source=mw.hostname,
+                category="attack_wave",
+            )
+            db.add(inc)
+            incidents.append(inc)
+            mw.incident_count += 1
+        
+        if worst == "critical":
+            mw.threat_score = min(100, mw.threat_score + 15)
+        elif worst == "high":
+            mw.threat_score = min(100, mw.threat_score + 8)
+        elif worst == "medium":
+            mw.threat_score = min(100, mw.threat_score + 3)
+        
+        if mw.threat_score >= 60:
+            mw.status = "under_attack"
     
     db.commit()
     
@@ -1452,11 +1513,16 @@ async def simulate_attack_wave(
         }
     })
     
-    return {
+    result = {
         "simulated": len(created),
         "message": f"Successfully simulated {len(created)} attack events",
         "events": [e.to_dict() for e in created[:10]],  # Return first 10
     }
+    if incidents:
+        result["incidents"] = [i.to_dict() for i in incidents]
+    if monitored_websites:
+        result["websites"] = [w.to_dict() for w in monitored_websites]
+    return result
 
 
 @app.post("/api/monitor/resolve-attack/{event_id}")
