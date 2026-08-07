@@ -32,7 +32,7 @@ from models import (
     init_db, SessionLocal, User, Incident, LogEvent, ThreatIntel,
     Endpoint, WAFRule, Notification, DashboardWidget, IngestionRecord, MonitorEvent,
     WebsiteMonitor,
-    generate_uuid, utcnow
+    generate_uuid, utcnow, to_iso
 )
 from auth import (
     hash_password, verify_password, create_access_token,
@@ -83,6 +83,7 @@ class IncidentUpdate(BaseModel):
     description: Optional[str] = None
     severity: Optional[str] = None
     status: Optional[str] = None
+    assignee: Optional[str] = None
 
 class AdminUserUpdate(BaseModel):
     role: Optional[str] = None
@@ -264,7 +265,7 @@ def admin_users(payload: dict = Depends(require_admin), db: Session = Depends(ge
             "role": u.role,
             "is_verified": u.is_verified,
             "is_active": u.is_active,
-            "created_at": u.created_at.isoformat() if u.created_at else None,
+            "created_at": to_iso(u.created_at),
             "websites_scanned": websites,
             "url_scans": url_scans,
             "file_uploads": file_uploads,
@@ -400,7 +401,7 @@ def admin_export_users_csv(payload: dict = Depends(require_admin), db: Session =
             u.username, u.email, u.role,
             "yes" if u.is_verified else "no",
             "yes" if u.is_active else "no",
-            u.created_at.isoformat() if u.created_at else "",
+            to_iso(u.created_at) or "",
             websites, url_scans, file_uploads, incidents, monitor_events,
         ])
     csv_data = buf.getvalue()
@@ -502,7 +503,7 @@ def recent_activity(limit: int = 20, payload: dict = Depends(get_current_user), 
             "message": rec.summary,
             "source": "ingestion",
             "severity": rec.status == "failed" and "high" or "low",
-            "timestamp": rec.created_at.isoformat(),
+            "timestamp": to_iso(rec.created_at),
             "event_type": rec.type,
         })
     # Merge both lists, sorted by timestamp descending
@@ -539,7 +540,18 @@ def list_incidents(
     db: Session = Depends(get_db),
 ):
     user_id = payload["sub"]
-    query = db.query(Incident).filter(Incident.user_id == user_id)
+    user = db.query(User).filter(User.id == user_id).first()
+    query = db.query(Incident)
+    if user and user.role in ("soc_lead", "admin"):
+        # SOC leads & admins manage the whole incident queue
+        pass
+    else:
+        # Analysts see incidents they own OR the ones assigned to them
+        # for investigation by a SOC lead.
+        query = query.filter(or_(
+            Incident.user_id == user_id,
+            Incident.assignee == (user.username if user else ""),
+        ))
     if status:
         query = query.filter(Incident.status == status)
     if severity:
@@ -555,7 +567,17 @@ def list_incidents(
 
 @app.get("/api/incidents/{incident_id}")
 def get_incident(incident_id: str, payload: dict = Depends(get_current_user), db: Session = Depends(get_db)):
-    incident = db.query(Incident).filter(Incident.id == incident_id, Incident.user_id == payload["sub"]).first()
+    user = db.query(User).filter(User.id == payload["sub"]).first()
+    if user and user.role in ("soc_lead", "admin"):
+        incident = db.query(Incident).filter(Incident.id == incident_id).first()
+    else:
+        incident = db.query(Incident).filter(
+            Incident.id == incident_id,
+            or_(
+                Incident.user_id == payload["sub"],
+                Incident.assignee == (user.username if user else ""),
+            ),
+        ).first()
     if not incident:
         raise HTTPException(404, "Incident not found")
     return incident.to_dict()
@@ -568,11 +590,68 @@ async def update_incident(
     payload: dict = Depends(get_current_user),
     db: Session = Depends(get_db),
 ):
-    incident = db.query(Incident).filter(Incident.id == incident_id, Incident.user_id == payload["sub"]).first()
+    user = db.query(User).filter(User.id == payload["sub"]).first()
+    if user and user.role in ("soc_lead", "admin"):
+        incident = db.query(Incident).filter(Incident.id == incident_id).first()
+    else:
+        # Analysts can update incidents they own OR the ones assigned to them
+        incident = db.query(Incident).filter(
+            Incident.id == incident_id,
+            or_(
+                Incident.user_id == payload["sub"],
+                Incident.assignee == (user.username if user else ""),
+            ),
+        ).first()
     if not incident:
         raise HTTPException(404, "Incident not found")
-    for field, value in update.model_dump(exclude_none=True).items():
+
+    updates = update.model_dump(exclude_none=True)
+    assignee = updates.pop("assignee", None)
+
+    # Only SOC leads & admins may (re)assign investigation work — reject the
+    # whole update before any field is mutated.
+    if assignee is not None and (not user or user.role not in ("soc_lead", "admin")):
+        raise HTTPException(403, "Only SOC leads or admins can assign incidents")
+
+    for field, value in updates.items():
         setattr(incident, field, value)
+
+    # ── Assignment: SOC lead assigns an analyst to investigate ──────────────
+    if assignee is not None:
+        if assignee == "":
+            incident.assignee = ""  # unassign
+        else:
+            analyst = db.query(User).filter(
+                User.username == assignee, User.is_active == True
+            ).first()
+            if not analyst:
+                raise HTTPException(400, f"Analyst '{assignee}' not found")
+            is_new_assignment = incident.assignee != analyst.username
+            incident.assignee = analyst.username
+            if is_new_assignment:
+                # Notify the analyst so they can start the investigation
+                notif = Notification(
+                    id=generate_uuid(),
+                    user_id=analyst.id,
+                    title="New Investigation Assigned",
+                    message=(
+                        f"{user.username} assigned you to investigate the incident "
+                        f"\"{incident.title}\" ({incident.severity} severity). "
+                        f"Open the Incidents page to start the investigation now."
+                    ),
+                    category="incident",
+                    severity=incident.severity,
+                    is_read=False,
+                    related_id=incident.id,
+                )
+                db.add(notif)
+                db.commit()
+                # Push the notification to the analyst's dashboard in real time
+                await broadcast_alert({
+                    "type": "notification",
+                    "data": notif.to_dict(),
+                })
+
     if update.status == "resolved" and not incident.resolved_at:
         incident.resolved_at = datetime.now(timezone.utc)
     incident.updated_at = datetime.now(timezone.utc)
@@ -600,6 +679,29 @@ async def update_incident(
         db.commit()
 
     return incident.to_dict()
+
+
+@app.get("/api/analysts")
+def list_analysts(payload: dict = Depends(get_current_user), db: Session = Depends(get_db)):
+    """List active analysts a SOC lead can assign investigation work to."""
+    user = db.query(User).filter(User.id == payload["sub"]).first()
+    if not user or user.role not in ("soc_lead", "admin"):
+        raise HTTPException(403, "Only SOC leads or admins can view analysts")
+    analysts = db.query(User).filter(
+        User.role == "analyst",
+        User.is_active == True,
+        User.is_verified == True,
+    ).order_by(User.username).all()
+    return {
+        "items": [{
+            "id": u.id,
+            "username": u.username,
+            "email": u.email,
+            "role": u.role,
+            "avatar": u.avatar,
+        } for u in analysts],
+        "total": len(analysts),
+    }
 
 
 # ─── Log Events ────────────────────────────────────────────────────────────
@@ -1301,6 +1403,14 @@ async def simulate_attack(
     
     template = attack_templates.get(attack_type, attack_templates["scan"])
     target_label = monitored_websites[0].hostname if monitored_websites else random.choice(["Database Server", "Web Application", "Authentication Service", "Load Balancer", "Web Server", "C2 Server Communication", "Payment API"])
+
+    # Callers like the nmap bridge can override the canned template with real
+    # observed details (message / method / path / payload). Backward compatible:
+    # absent keys fall back to the template exactly as before.
+    event_message = data.get("message") or template["message"]
+    event_method = data.get("method") or template["method"]
+    event_path = data.get("path") or template["path"]
+    event_payload = data.get("payload") or template["payload"]
     
     countries = ["Russia", "China", "North Korea", "Iran", "Ukraine", "United States", "Germany", "Netherlands", "Brazil", "Nigeria", "Vietnam", "India"]
     status_options = ["blocked", "blocked", "blocked", "detected", "investigating"]
@@ -1320,11 +1430,11 @@ async def simulate_attack(
             source_ip=source_ip,
             source_country=random.choice(countries),
             target=target_label,
-            method=template["method"],
-            path=template["path"],
+            method=event_method,
+            path=event_path,
             user_agent=f"Mozilla/5.0 (compatible; {random.choice(['AttackBot/1.0', 'Malice/2.1', 'HackerTool/3.0', 'Nikto/2.5', 'SQLMap/1.8'])})",
-            payload=template["payload"],
-            message=template["message"],
+            payload=event_payload,
+            message=event_message,
             status=data.get("status", random.choice(status_options)),
             is_active=True,
         )
@@ -1337,10 +1447,10 @@ async def simulate_attack(
         id=generate_uuid(),
         source_ip=source_ip,
         event_type="warning" if severity in ["low", "medium"] else "critical",
-        message=template["message"],
+        message=event_message,
         source="live_monitor",
         severity=severity,
-        raw_data=template["payload"],
+        raw_data=event_payload,
     )
     db.add(log)
     db.commit()
@@ -1353,7 +1463,10 @@ async def simulate_attack(
                 id=generate_uuid(),
                 user_id=mw.user_id,
                 title=f"{severity.title()} {attack_type.replace('_', ' ').title()} on {mw.hostname}",
-                description=f"A {severity} severity {attack_type} attack was detected targeting {target_url} from IP {source_ip}.",
+                description=(
+                    f"A {severity} severity {attack_type} attack was detected targeting {target_url} from IP {source_ip}."
+                    + (f" {data['details']}" if data.get("details") else "")
+                ),
                 severity=severity,
                 status="open",
                 source=mw.hostname,

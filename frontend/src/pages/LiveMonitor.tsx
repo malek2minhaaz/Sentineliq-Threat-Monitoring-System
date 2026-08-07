@@ -6,7 +6,7 @@ import {
   Lock, Eye, EyeOff, Terminal, Code,
   Skull, Flame, Crosshair, Swords, Bug, Trash2,
   XCircle, Info, Loader, Target, Gauge,
-  FileText, CornerDownRight, CheckCheck,
+  CornerDownRight, CheckCheck,
   Monitor, List,
 } from 'lucide-react';
 import { api } from '../utils/api';
@@ -224,58 +224,6 @@ function ThreatScoreGauge({ score, level }: { score: number; level: string }) {
         {config.label}
       </motion.div>
     </div>
-  );
-}
-
-// ─── Finding Item ───────────────────────────────────────────────────────────
-
-function FindingItem({ finding, index }: { finding: ScanFinding; index: number }) {
-  const Icon = TYPE_ICONS[finding.type] || AlertTriangle;
-  return (
-    <motion.div
-      initial={{ opacity: 0, x: -10 }}
-      animate={{ opacity: 1, x: 0 }}
-      transition={{ delay: index * 0.05 }}
-      style={{
-        display: 'flex', gap: 12, padding: '12px 14px',
-        background: 'var(--bg-secondary)',
-        borderRadius: 'var(--border-radius-sm)',
-        border: `1px solid ${(finding.severity === 'high' || finding.severity === 'critical') ? SEVERITY_BG[finding.severity] : 'var(--border-primary)'}`,
-        borderLeft: `3px solid ${SEVERITY_COLORS[finding.severity] || 'var(--text-tertiary)'}`,
-      }}
-    >
-      <div style={{
-        width: 32, height: 32, borderRadius: 8, flexShrink: 0,
-        background: SEVERITY_BG[finding.severity],
-        display: 'flex', alignItems: 'center', justifyContent: 'center',
-      }}>
-        <Icon size={16} color={SEVERITY_COLORS[finding.severity]} />
-      </div>
-      <div style={{ flex: 1, minWidth: 0 }}>
-        <div style={{ display: 'flex', alignItems: 'center', gap: 8, marginBottom: 4 }}>
-          <span style={{ fontWeight: 600, fontSize: 'var(--font-size-sm)', color: 'var(--text-primary)' }}>
-            {finding.title}
-          </span>
-          {finding.score > 0 && (
-            <span className="pill" style={{
-              background: SEVERITY_BG[finding.severity],
-              color: SEVERITY_COLORS[finding.severity],
-              fontSize: 10, padding: '0 8px',
-            }}>
-              +{finding.score}
-            </span>
-          )}
-        </div>
-        <div style={{ fontSize: 'var(--font-size-xs)', color: 'var(--text-secondary)', marginBottom: 4 }}>
-          {finding.description}
-        </div>
-        {finding.recommendation && (
-          <div style={{ fontSize: 11, color: 'var(--accent-info)', fontStyle: 'italic' }}>
-            Recommendation: {finding.recommendation}
-          </div>
-        )}
-      </div>
-    </motion.div>
   );
 }
 
@@ -765,39 +713,6 @@ export default function LiveMonitor() {
                 <ThreatScoreGauge score={selectedWebsite.threat_score} level={selectedWebsite.threat_level} />
               </div>
 
-              {/* Scan Findings */}
-              {selectedWebsite.findings && selectedWebsite.findings.length > 0 && (
-                <div className="card" style={{ marginBottom: 'var(--space-lg)' }}>
-                  <div className="card-header">
-                    <h3 className="card-title">
-                      <FileText size={16} style={{ marginRight: 8, color: 'var(--accent-primary)' }} />
-                      Scan Findings
-                      <span className="pill" style={{ marginLeft: 8, fontSize: 10 }}>
-                        {selectedWebsite.findings.length} findings
-                      </span>
-                    </h3>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
-                      {['critical', 'high', 'medium', 'low', 'info'].filter(s => 
-                        selectedWebsite.findings.some(f => f.severity === s)
-                      ).map(s => (
-                        <span key={s} className="pill" style={{
-                          background: SEVERITY_BG[s],
-                          color: SEVERITY_COLORS[s],
-                          fontSize: 10, padding: '0 8px',
-                        }}>
-                          {s}: {selectedWebsite.findings.filter(f => f.severity === s).length}
-                        </span>
-                      ))}
-                    </div>
-                  </div>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-                    {selectedWebsite.findings.map((finding, idx) => (
-                      <FindingItem key={idx} finding={finding} index={idx} />
-                    ))}
-                  </div>
-                </div>
-              )}
-
               {/* Incidents */}
               <div className="card" style={{ marginBottom: 'var(--space-lg)' }}>
                 <div className="card-header">
@@ -967,8 +882,8 @@ export default function LiveMonitor() {
                 </h2>
                 <p style={{ color: 'var(--text-secondary)', fontSize: 'var(--font-size-sm)', lineHeight: 1.6 }}>
                   Enter a URL above to scan for security threats, check phishing indicators, 
-                  and monitor the website in real-time for attacks. Get detailed findings, 
-                  threat scores, and incident response capabilities.
+                  and monitor the website in real-time for attacks. Get threat scores
+                  and incident response capabilities.
                 </p>
                 <div style={{
                   display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: 16, marginTop: 24,

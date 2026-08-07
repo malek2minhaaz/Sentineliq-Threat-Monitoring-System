@@ -25,6 +25,21 @@ def utcnow():
     return datetime.now(timezone.utc)
 
 
+def to_iso(dt):
+    """Serialize a datetime as an ISO-8601 UTC string.
+
+    SQLite stores datetimes as naive strings (tzinfo is lost on read-back),
+    so a plain .isoformat() yields no timezone offset and browsers parse the
+    value as *local* time — shifting displayed times by the user's UTC offset.
+    Treat naive datetimes as UTC so the frontend converts them correctly.
+    """
+    if dt is None:
+        return None
+    if dt.tzinfo is None:
+        dt = dt.replace(tzinfo=timezone.utc)
+    return dt.astimezone(timezone.utc).isoformat()
+
+
 # ─── User ───────────────────────────────────────────────────────────────────
 
 class User(Base):
@@ -47,7 +62,7 @@ class User(Base):
             "username": self.username,
             "role": self.role,
             "avatar": self.avatar,
-            "created_at": self.created_at.isoformat(),
+            "created_at": to_iso(self.created_at),
             "is_verified": self.is_verified,
             "is_active": self.is_active,
             "theme": self.theme,
@@ -82,9 +97,9 @@ class Incident(Base):
             "source": self.source,
             "category": self.category,
             "user_id": self.user_id,
-            "created_at": self.created_at.isoformat(),
-            "updated_at": self.updated_at.isoformat(),
-            "resolved_at": self.resolved_at.isoformat() if self.resolved_at else None,
+            "created_at": to_iso(self.created_at),
+            "updated_at": to_iso(self.updated_at),
+            "resolved_at": to_iso(self.resolved_at),
         }
 
 
@@ -106,7 +121,7 @@ class LogEvent(Base):
     def to_dict(self):
         return {
             "id": self.id,
-            "timestamp": self.timestamp.isoformat(),
+            "timestamp": to_iso(self.timestamp),
             "source_ip": self.source_ip,
             "event_type": self.event_type,
             "message": self.message,
@@ -146,8 +161,8 @@ class ThreatIntel(Base):
             "confidence": self.confidence,
             "severity": self.severity,
             "description": self.description,
-            "first_seen": self.first_seen.isoformat(),
-            "last_seen": self.last_seen.isoformat(),
+            "first_seen": to_iso(self.first_seen),
+            "last_seen": to_iso(self.last_seen),
             "tags": self.tags.split(",") if self.tags else [],
             "source": self.source,
             "is_active": self.is_active,
@@ -186,7 +201,7 @@ class Endpoint(Base):
             "os": self.os,
             "status": self.status,
             "agent_version": self.agent_version,
-            "last_seen": self.last_seen.isoformat(),
+            "last_seen": to_iso(self.last_seen),
             "risk_score": self.risk_score,
             "cpu_usage": self.cpu_usage,
             "memory_usage": self.memory_usage,
@@ -196,7 +211,7 @@ class Endpoint(Base):
             "tags": self.tags.split(",") if self.tags else [],
             "isolated": self.isolated,
             "isolation_reason": self.isolation_reason,
-            "isolation_started_at": self.isolation_started_at.isoformat() if self.isolation_started_at else None,
+            "isolation_started_at": to_iso(self.isolation_started_at),
             "action_history": json.loads(self.action_history) if self.action_history else [],
         }
 
@@ -226,7 +241,7 @@ class WAFRule(Base):
             "priority": self.priority,
             "pattern": self.pattern,
             "is_active": self.is_active,
-            "created_at": self.created_at.isoformat(),
+            "created_at": to_iso(self.created_at),
             "hits": self.hits,
         }
 
@@ -255,7 +270,7 @@ class IngestionRecord(Base):
             "records_count": self.records_count,
             "status": self.status,
             "summary": self.summary,
-            "created_at": self.created_at.isoformat(),
+            "created_at": to_iso(self.created_at),
         }
 
 
@@ -304,7 +319,7 @@ class Notification(Base):
             "category": self.category,
             "severity": self.severity,
             "is_read": self.is_read,
-            "created_at": self.created_at.isoformat(),
+            "created_at": to_iso(self.created_at),
             "related_id": self.related_id,
         }
 
@@ -334,7 +349,7 @@ class MonitorEvent(Base):
         return {
             "id": self.id,
             "user_id": self.user_id,
-            "timestamp": self.timestamp.isoformat(),
+            "timestamp": to_iso(self.timestamp),
             "event_type": self.event_type,
             "severity": self.severity,
             "source_ip": self.source_ip,
@@ -382,9 +397,9 @@ class WebsiteMonitor(Base):
             "threat_level": self.threat_level,
             "status": self.status,
             "findings": json.loads(self.findings) if self.findings else [],
-            "last_scan_at": self.last_scan_at.isoformat() if self.last_scan_at else None,
-            "created_at": self.created_at.isoformat(),
-            "updated_at": self.updated_at.isoformat(),
+            "last_scan_at": to_iso(self.last_scan_at),
+            "created_at": to_iso(self.created_at),
+            "updated_at": to_iso(self.updated_at),
             "is_active": self.is_active,
             "scan_count": self.scan_count,
             "incident_count": self.incident_count,

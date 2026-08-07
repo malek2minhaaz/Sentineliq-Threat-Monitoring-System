@@ -3,9 +3,11 @@ import { motion, AnimatePresence } from 'framer-motion';
 import {
   Search, RefreshCw, AlertTriangle,
   User, Calendar, Clock, MessageSquare, CheckCircle, XCircle,
-  ArrowRight,
+  ArrowRight, Users, UserCheck, ChevronDown,
 } from 'lucide-react';
 import { api } from '../utils/api';
+import { useAuth } from '../contexts/AuthContext';
+import { useToast } from '../contexts/ToastContext';
 
 interface Incident {
   id: string;
@@ -19,6 +21,14 @@ interface Incident {
   created_at: string;
   updated_at: string;
   resolved_at: string | null;
+}
+
+interface Analyst {
+  id: string;
+  username: string;
+  email: string;
+  role: string;
+  avatar: string;
 }
 
 const severityConfig: Record<string, { color: string; bg: string; gradient: string }> = {
@@ -46,6 +56,15 @@ export default function Incidents() {
   const [page, setPage] = useState(1);
   const limit = 20;
 
+  const { user } = useAuth();
+  const { addToast } = useToast();
+  const canAssign = user?.role === 'soc_lead' || user?.role === 'admin';
+
+  // Analyst roster for assignment
+  const [analysts, setAnalysts] = useState<Analyst[]>([]);
+  const [showAnalysts, setShowAnalysts] = useState(false);
+  const [assigningTo, setAssigningTo] = useState<string | null>(null);
+
   const fetchIncidents = useCallback(async () => {
     setLoading(true);
     try {
@@ -66,11 +85,46 @@ export default function Incidents() {
 
   useEffect(() => { fetchIncidents(); }, [fetchIncidents]);
 
+  const fetchAnalysts = useCallback(async () => {
+    try {
+      const res = await api.get<{ items: Analyst[]; total: number }>('/analysts');
+      setAnalysts(res.items);
+    } catch {
+      // Ignore
+    }
+  }, []);
+
+  useEffect(() => { if (canAssign) fetchAnalysts(); }, [canAssign, fetchAnalysts]);
+
   const updateStatus = async (id: string, status: string) => {
     try {
       await api.patch(`/incidents/${id}`, { status });
       fetchIncidents();
     } catch { /* ignore */ }
+  };
+
+  const assignIncident = async (username: string) => {
+    if (!selected) return;
+    setAssigningTo(username);
+    try {
+      const updated = await api.patch<Incident>(`/incidents/${selected.id}`, { assignee: username });
+      setIncidents(prev => prev.map(i => (i.id === updated.id ? updated : i)));
+      setSelected(updated);
+      setShowAnalysts(false);
+      addToast({
+        type: 'success',
+        title: 'Investigation Assigned',
+        message: `"${updated.title}" was assigned to ${username}. A notification was sent to their dashboard.`,
+      });
+    } catch {
+      addToast({
+        type: 'error',
+        title: 'Assignment Failed',
+        message: 'Could not assign this incident. Please try again.',
+      });
+    } finally {
+      setAssigningTo(null);
+    }
   };
 
   const totalPages = Math.ceil(total / limit);
@@ -124,7 +178,7 @@ export default function Incidents() {
 
       <div style={{
         display: 'grid',
-        gridTemplateColumns: selected ? '1fr 380px' : '1fr',
+        gridTemplateColumns: selected ? '1fr 360px' : '1fr',
         gap: 'var(--space-lg)',
         alignItems: 'start',
       }} className="incidents-layout">
@@ -277,10 +331,20 @@ export default function Incidents() {
               animate={{ opacity: 1, x: 0 }}
               exit={{ opacity: 0, x: 20 }}
               className="card"
-              style={{ position: 'sticky', top: 80 }}
+              style={{
+                position: 'sticky',
+                // Just below the sticky header — no empty gap above the card.
+                top: 'calc(var(--header-height) + 4px)',
+                // Keep the card within the viewport: if the content is taller
+                // it scrolls INSIDE the card, so the actions at the bottom are
+                // always reachable without losing sight of the incident list.
+                maxHeight: 'calc(100vh - 84px)',
+                overflowY: 'auto',
+                scrollbarWidth: 'thin',
+              }}
             >
-              <div style={{ marginBottom: 16 }}>
-                <div style={{ display: 'flex', gap: 6, marginBottom: 10, flexWrap: 'wrap' }}>
+              <div style={{ marginBottom: 12 }}>
+                <div style={{ display: 'flex', gap: 6, marginBottom: 8, flexWrap: 'wrap' }}>
                   <span className={`badge badge-${selected.severity}`}>{selected.severity}</span>
                   <span className="badge" style={{
                     background: `${(statusConfig[selected.status] || statusConfig.closed).bg}`,
@@ -289,10 +353,10 @@ export default function Incidents() {
                     {selected.status}
                   </span>
                 </div>
-                <h3 style={{ fontSize: 'var(--font-size-lg)', fontWeight: 700 }}>{selected.title}</h3>
+                <h3 style={{ fontSize: 'var(--font-size-base)', fontWeight: 600, lineHeight: 1.4 }}>{selected.title}</h3>
               </div>
 
-              <div className="detail-grid" style={{ marginBottom: 16 }}>
+              <div className="detail-grid" style={{ marginBottom: 12 }}>
                 <div className="detail-item">
                   <span className="detail-item-label">Assignee</span>
                   <span className="detail-item-value">
@@ -323,15 +387,127 @@ export default function Incidents() {
                 </div>
               </div>
 
-              <div style={{ marginBottom: 16 }}>
-                <div className="detail-item-label" style={{ marginBottom: 8 }}>Description</div>
+              {/* Assignment — SOC leads & admins can assign an analyst to investigate */}
+              {canAssign && (
+                <div style={{ marginBottom: 12 }}>
+                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: 8 }}>
+                    <span className="detail-item-label" style={{ marginBottom: 0 }}>Assignment</span>
+                    {selected.assignee && (
+                      <span className="badge" style={{ background: 'rgba(16, 185, 129, 0.12)', color: '#10b981' }}>
+                        <UserCheck size={12} style={{ verticalAlign: 'middle', marginRight: 4 }} />
+                        {selected.assignee}
+                      </span>
+                    )}
+                  </div>
+                  <motion.button
+                    whileHover={{ scale: 1.01 }}
+                    whileTap={{ scale: 0.99 }}
+                    className="btn btn-sm btn-secondary"
+                    style={{ width: '100%', justifyContent: 'space-between' }}
+                    onClick={() => setShowAnalysts(v => !v)}
+                  >
+                    <span style={{ display: 'flex', alignItems: 'center', gap: 8 }}>
+                      <Users size={14} />
+                      {selected.assignee ? 'Reassign Analyst' : 'Assign to Analyst'}
+                    </span>
+                    <ChevronDown size={14} style={{
+                      transform: showAnalysts ? 'rotate(180deg)' : 'none',
+                      transition: 'transform 150ms ease',
+                    }} />
+                  </motion.button>
+
+                  <AnimatePresence>
+                    {showAnalysts && (
+                      <motion.div
+                        initial={{ opacity: 0, height: 0 }}
+                        animate={{ opacity: 1, height: 'auto' }}
+                        exit={{ opacity: 0, height: 0 }}
+                        style={{ overflow: 'hidden' }}
+                      >
+                        <div style={{
+                          marginTop: 8,
+                          border: 'var(--border-primary)',
+                          borderRadius: 'var(--border-radius-sm)',
+                          background: 'var(--bg-secondary)',
+                          maxHeight: 240,
+                          overflowY: 'auto',
+                        }}>
+                          {analysts.length === 0 ? (
+                            <div style={{ padding: 20, textAlign: 'center', color: 'var(--text-tertiary)', fontSize: 'var(--font-size-xs)' }}>
+                              <Users size={20} style={{ opacity: 0.3, marginBottom: 6 }} />
+                              <div>No analysts available in the database</div>
+                            </div>
+                          ) : (
+                            analysts.map(a => {
+                              const isAssigned = selected.assignee === a.username;
+                              const isAssigning = assigningTo === a.username;
+                              return (
+                                <motion.div
+                                  key={a.id}
+                                  whileHover={{ background: 'var(--bg-card-hover)' }}
+                                  style={{
+                                    display: 'flex', alignItems: 'center', gap: 10,
+                                    padding: '10px 12px',
+                                    borderBottom: 'var(--border-primary)',
+                                    cursor: isAssigned ? 'default' : 'pointer',
+                                  }}
+                                  onClick={() => { if (!isAssigned) assignIncident(a.username); }}
+                                >
+                                  <div style={{
+                                    width: 30, height: 30, borderRadius: '50%', flexShrink: 0,
+                                    background: isAssigned ? 'rgba(16,185,129,0.15)' : 'rgba(56,189,248,0.12)',
+                                    color: isAssigned ? '#10b981' : 'var(--accent-primary)',
+                                    display: 'flex', alignItems: 'center', justifyContent: 'center',
+                                    fontSize: 13, fontWeight: 600,
+                                  }}>
+                                    {a.username.charAt(0).toUpperCase()}
+                                  </div>
+                                  <div style={{ flex: 1, minWidth: 0 }}>
+                                    <div style={{ fontSize: 'var(--font-size-sm)', fontWeight: 600, color: 'var(--text-primary)' }}>
+                                      {a.username}
+                                    </div>
+                                    <div style={{
+                                      fontSize: 10, color: 'var(--text-tertiary)',
+                                      overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap',
+                                    }}>
+                                      {a.email}
+                                    </div>
+                                  </div>
+                                  {isAssigned ? (
+                                    <span className="badge" style={{ background: 'rgba(16,185,129,0.12)', color: '#10b981', fontSize: 10 }}>
+                                      <UserCheck size={11} style={{ verticalAlign: 'middle', marginRight: 4 }} /> Assigned
+                                    </span>
+                                  ) : (
+                                    <button
+                                      className="btn btn-xs btn-primary"
+                                      disabled={isAssigning}
+                                      onClick={(e) => { e.stopPropagation(); assignIncident(a.username); }}
+                                    >
+                                      {isAssigning ? 'Assigning…' : 'Assign'}
+                                    </button>
+                                  )}
+                                </motion.div>
+                              );
+                            })
+                          )}
+                        </div>
+                      </motion.div>
+                    )}
+                  </AnimatePresence>
+                </div>
+              )}
+
+              <div style={{ marginBottom: 12 }}>
+                <div className="detail-item-label" style={{ marginBottom: 6 }}>Description</div>
                 <div style={{
-                  padding: 12,
+                  padding: 10,
                   background: 'var(--bg-secondary)',
                   borderRadius: 'var(--border-radius-sm)',
-                  fontSize: 'var(--font-size-sm)',
+                  fontSize: 'var(--font-size-xs)',
                   color: 'var(--text-secondary)',
-                  lineHeight: 1.6,
+                  lineHeight: 1.5,
+                  maxHeight: 84,
+                  overflowY: 'auto',
                 }}>
                   {selected.description || 'No description provided.'}
                 </div>

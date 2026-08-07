@@ -4,6 +4,7 @@ import {
   Bell, Search, Menu, Sun, Moon,
   CheckCheck, Trash2, AlertTriangle, Info, AlertCircle, LogOut,
 } from 'lucide-react';
+import { useNavigate } from 'react-router-dom';
 import { useNotifications } from '../../contexts/NotificationContext';
 import { useTheme } from '../../contexts/ThemeContext';
 import { useAuth } from '../../contexts/AuthContext';
@@ -42,6 +43,7 @@ export default function Header({ onMenuClick, onCommandPalette }: HeaderProps) {
   const { notifications, unreadCount, markRead, markAllRead, clearAll } = useNotifications();
   const { theme, toggleTheme } = useTheme();
   const { user, logout } = useAuth();
+  const navigate = useNavigate();
   const [showNotifications, setShowNotifications] = useState(false);
   const notifRef = useRef<HTMLDivElement>(null);
 
@@ -264,7 +266,12 @@ export default function Header({ onMenuClick, onCommandPalette }: HeaderProps) {
                         key={notif.id}
                         initial={{ opacity: 0 }}
                         animate={{ opacity: 1 }}
-                        onClick={() => { if (!notif.is_read) markRead(notif.id); }}
+                        onClick={() => {
+                          if (!notif.is_read) markRead(notif.id);
+                          // Assignment/incident notifications jump straight to the
+                          // Incidents page so the analyst can start investigating.
+                          if (notif.category === 'incident') navigate('/incidents');
+                        }}
                         style={{
                           padding: '12px 16px',
                           borderBottom: 'var(--border-primary)',

@@ -60,8 +60,17 @@ function StatCard({ icon: Icon, label, value, change, color, prefix, subtitle }:
   );
 }
 
-// Chart colors
-const COLORS = ['#38bdf8', '#60a5fa', '#f59e0b', '#ef4444', '#10b981', '#3b82f6'];
+// Severity colors — semantic mapping matching the design tokens & other pages
+// (critical=red, high=orange, medium=yellow, low=green, info=blue)
+const SEVERITY_COLORS: Record<string, string> = {
+  critical: '#ef4444',
+  high: '#f97316',
+  medium: '#eab308',
+  low: '#22c55e',
+  info: '#3b82f6',
+};
+const SEVERITY_ORDER = ['critical', 'high', 'medium', 'low', 'info'];
+const severityColor = (name: string) => SEVERITY_COLORS[name.toLowerCase()] || '#64748b';
 
 interface DashboardData {
   stats: {
@@ -143,6 +152,15 @@ export default function Dashboard() {
   }
 
   const { stats, attackVectors, severityBreakdown, incidentTimeline, recentActivity } = data;
+
+  // Sort severity slices most-dangerous first so the donut reads correctly
+  const sortedSeverity = [...severityBreakdown].sort((a, b) => {
+    const ra = SEVERITY_ORDER.indexOf(a.name.toLowerCase());
+    const rb = SEVERITY_ORDER.indexOf(b.name.toLowerCase());
+    return (ra === -1 ? SEVERITY_ORDER.length : ra) - (rb === -1 ? SEVERITY_ORDER.length : rb);
+  });
+  const totalIncidents = sortedSeverity.reduce((sum, s) => sum + s.value, 0);
+  const pieData = sortedSeverity.length > 0 ? sortedSeverity : [{ name: 'Empty', value: 1 }];
 
   return (
     <div className="page-container">
@@ -363,53 +381,81 @@ export default function Dashboard() {
             </h3>
           </div>
           <div style={{ height: 280, display: 'flex', alignItems: 'center', justifyContent: 'center', gap: 20 }}>
-            <ResponsiveContainer width="60%" height="100%">
-              <RePieChart>
-                <Pie
-                  data={severityBreakdown.length > 0 ? severityBreakdown : [{ name: 'Empty', value: 1 }]}
-                  cx="50%"
-                  cy="50%"
-                  innerRadius={60}
-                  outerRadius={100}
-                  paddingAngle={4}
-                  dataKey="value"
-                >
-                  {[...(severityBreakdown.length > 0 ? severityBreakdown : [{ name: 'Empty', value: 1 }])].map((_, idx) => (
-                    <Cell key={idx} fill={COLORS[idx % COLORS.length]} />
-                  ))}
-                </Pie>
-                <Tooltip
-                  contentStyle={{
-                    background: 'var(--bg-card)',
-                    border: 'var(--border-primary)',
-                    borderRadius: 8,
-                    color: 'var(--text-primary)',
-                  }}
-                />
-              </RePieChart>
-            </ResponsiveContainer>
+            <div style={{ position: 'relative', width: '60%', height: '100%' }}>
+              <ResponsiveContainer width="100%" height="100%">
+                <RePieChart>
+                  <Pie
+                    data={pieData}
+                    cx="50%"
+                    cy="50%"
+                    innerRadius={60}
+                    outerRadius={100}
+                    paddingAngle={4}
+                    dataKey="value"
+                  >
+                    {pieData.map((item) => (
+                      <Cell
+                        key={item.name}
+                        fill={severityColor(item.name)}
+                        style={{ filter: `drop-shadow(0 0 6px ${severityColor(item.name)}55)` }}
+                      />
+                    ))}
+                  </Pie>
+                  <Tooltip
+                    contentStyle={{
+                      background: 'var(--bg-card)',
+                      border: 'var(--border-primary)',
+                      borderRadius: 8,
+                      color: 'var(--text-primary)',
+                    }}
+                  />
+                </RePieChart>
+              </ResponsiveContainer>
+              {/* Center total */}
+              {sortedSeverity.length > 0 && (
+                <div style={{
+                  position: 'absolute',
+                  top: '50%',
+                  left: '50%',
+                  transform: 'translate(-50%, -50%)',
+                  textAlign: 'center',
+                  pointerEvents: 'none',
+                }}>
+                  <div className="stat-card-value" style={{ fontSize: 'var(--font-size-2xl)' }}>
+                    {totalIncidents.toLocaleString()}
+                  </div>
+                  <div className="stat-card-label">Incidents</div>
+                </div>
+              )}
+            </div>
             {/* Legend */}
             <div style={{ display: 'flex', flexDirection: 'column', gap: 8 }}>
-              {severityBreakdown.map((item, idx) => (
+              {sortedSeverity.map((item, idx) => (
                 <motion.div
                   key={item.name}
                   initial={{ opacity: 0, x: -10 }}
                   animate={{ opacity: 1, x: 0 }}
+                  whileHover={{ x: 4 }}
                   transition={{ delay: idx * 0.05 }}
                   style={{
                     display: 'flex',
                     alignItems: 'center',
                     gap: 8,
                     fontSize: 'var(--font-size-xs)',
+                    cursor: 'default',
                   }}
                 >
                   <span style={{
                     width: 12, height: 12, borderRadius: 4,
-                    background: COLORS[idx % COLORS.length],
+                    background: severityColor(item.name),
+                    boxShadow: `0 0 8px ${severityColor(item.name)}40`,
                   }} />
-                  <span style={{ color: 'var(--text-secondary)', minWidth: 60 }}>{item.name}</span>
+                  <span style={{ color: 'var(--text-secondary)', minWidth: 56, textTransform: 'capitalize' }}>{item.name}</span>
                   <span style={{ fontWeight: 700, color: 'var(--text-primary)', fontFamily: 'var(--font-mono)' }}>
                     {item.value}
+                  </span>
+                  <span style={{ color: 'var(--text-tertiary)', fontFamily: 'var(--font-mono)', fontSize: 10 }}>
+                    {totalIncidents > 0 ? `${Math.round((item.value / totalIncidents) * 100)}%` : ''}
                   </span>
                 </motion.div>
               ))}

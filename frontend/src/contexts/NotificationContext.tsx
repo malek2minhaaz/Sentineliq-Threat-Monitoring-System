@@ -80,6 +80,14 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
           return;
         }
 
+        // A notification was created for this user (e.g. a SOC lead assigned a
+        // new investigation) — re-fetch from the server so the bell + unread
+        // count stay in sync in real time.
+        if (data.type === 'notification') {
+          fetchNotifications();
+          return;
+        }
+
         if (data.type === 'new_event' || data.type === 'incident_update') {
           const item = data.data;
           const sev = item.severity || 'info';
@@ -130,7 +138,7 @@ export function NotificationProvider({ children }: { children: React.ReactNode }
     return () => {
       ws.close();
     };
-  }, [addToast]);
+  }, [addToast, fetchNotifications]);
 
   const markRead = useCallback(async (id: string) => {
     try {
